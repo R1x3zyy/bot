@@ -1,0 +1,141 @@
+import os
+from decimal import Decimal
+from typing import Any
+
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from pydantic import BaseModel
+
+from db import (
+    add_links,
+    admin_stats,
+    ensure_schema,
+    get_product_config,
+    list_links,
+    list_users,
+    recent_orders,
+    update_order_status,
+    update_product_config,
+)
+
+
+load_dotenv()
+
+ADMIN_LOGIN = os.getenv("ADMIN_LOGIN", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change_me")
+ADMIN_CORS_ORIGINS = os.getenv("ADMIN_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+
+app = FastAPI(title="Gemini Store Admin API")
+security = HTTPBasic()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in ADMIN_CORS_ORIGINS.split(",") if origin.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class LinksPayload(BaseModel):
+    links: str
+
+
+class ProductPayload(BaseModel):
+    title: str
+    price_rub: Decimal
+    price_usd: Decimal
+    description: str
+
+
+class OrderStatusPayload(BaseModel):
+    status: str
+
+
+def check_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
+    if credentials.username != ADMIN_LOGIN or credentials.password != ADMIN_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect login or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+
+def clean_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def clean_row(row: dict) -> dict:
+    return {key: clean_value(value) for key, value in row.items()}
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    await ensure_schema()
+
+
+@app.get("/api/health")
+async def health() -> dict:
+    return {"ok": True}
+
+
+@app.get("/api/stats")
+async def stats(_: str = Depends(check_auth)) -> dict:
+    return await admin_stats()
+
+
+@app.get("/api/orders")
+async def orders(_: str = Depends(check_auth)) -> list[dict]:
+    return [clean_row(order) for order in await recent_orders(100)]
+
+
+@app.patch("/api/orders/{order_id}/status")
+async def change_order_status(
+    order_id: int,
+    payload: OrderStatusPayload,
+    _: str = Depends(check_auth),
+) -> dict:
+    order = await update_order_status(order_id, payload.status.strip())
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return clean_row(order)
+
+
+@app.get("/api/users")
+async def users(_: str = Depends(check_auth)) -> list[dict]:
+    return [clean_row(user) for user in await list_users(100)]
+
+
+@app.get("/api/links")
+async def links(_: str = Depends(check_auth)) -> list[dict]:
+    return [clean_row(link) for link in await list_links(200)]
+
+
+@app.post("/api/links")
+async def create_links(payload: LinksPayload, _: str = Depends(check_auth)) -> dict:
+    added = await add_links(payload.links.splitlines())
+    return {"added": added}
+
+
+@app.get("/api/product")
+async def product(_: str = Depends(check_auth)) -> dict:
+    return clean_row(await get_product_config())
+
+
+@app.put("/api/product")
+async def save_product(payload: ProductPayload, _: str = Depends(check_auth)) -> dict:
+    product_row = await update_product_config(
+        code="gemini_link_18_month",
+        title=payload.title.strip(),
+        price_rub=payload.price_rub,
+        price_usd=payload.price_usd,
+        description=payload.description.strip(),
+    )
+    return clean_row(product_row)
