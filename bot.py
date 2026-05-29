@@ -3,6 +3,7 @@ import logging
 import os
 import re
 
+import aiohttp
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -22,10 +23,13 @@ from dotenv import load_dotenv
 from db import (
     add_links,
     admin_stats,
+    complete_crypto_payment,
     count_available_links,
     create_balance_order,
+    create_crypto_payment,
     ensure_schema,
     ensure_user,
+    get_crypto_payment,
     get_product_config,
     get_transactions,
     get_user,
@@ -39,6 +43,8 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
+CRYPTOBOT_TOKEN = os.getenv("CRYPTOBOT_TOKEN")
+CRYPTOBOT_API_URL = os.getenv("CRYPTOBOT_API_URL", "https://pay.crypt.bot/api")
 PRODUCT_CODE = "gemini_link_18_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
@@ -101,12 +107,58 @@ def balance_topup_text(balance: int, required: int, lang: str = "ru") -> str:
     )
 
 
+async def cryptobot_request(method: str, payload: dict | None = None) -> dict:
+    if not CRYPTOBOT_TOKEN:
+        raise RuntimeError("CRYPTOBOT_TOKEN is not set")
+
+    url = f"{CRYPTOBOT_API_URL.rstrip('/')}/{method}"
+    headers = {"Crypto-Pay-API-Token": CRYPTOBOT_TOKEN}
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.post(url, json=payload or {}) as response:
+            data = await response.json(content_type=None)
+
+    if not data.get("ok"):
+        raise RuntimeError(data.get("error") or "CryptoBot API error")
+    return data["result"]
+
+
+async def create_cryptobot_invoice(amount_rub: int, description: str, payload: str) -> dict:
+    return await cryptobot_request(
+        "createInvoice",
+        {
+            "currency_type": "fiat",
+            "fiat": "RUB",
+            "amount": str(amount_rub),
+            "accepted_assets": "USDT,TON,BTC,ETH,LTC,BNB,TRX,USDC",
+            "description": description[:1024],
+            "payload": payload,
+            "allow_comments": False,
+            "allow_anonymous": False,
+            "expires_in": 3600,
+        },
+    )
+
+
+async def get_cryptobot_invoice(invoice_id: int) -> dict | None:
+    result = await cryptobot_request("getInvoices", {"invoice_ids": str(invoice_id)})
+    if isinstance(result, list):
+        return result[0] if result else None
+    if isinstance(result, dict):
+        items = result.get("items") or result.get("invoices") or []
+        return items[0] if items else None
+    return None
+
+
 class OrderState(StatesGroup):
     waiting_for_contact = State()
 
 
 class BulkOrderState(StatesGroup):
     waiting_for_quantity = State()
+    waiting_for_contact = State()
+
+
+class CryptoOrderState(StatesGroup):
     waiting_for_contact = State()
 
 
@@ -248,6 +300,17 @@ def bulk_payment_keyboard(quantity: int, lang: str = "ru") -> InlineKeyboardMark
         ]
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def cryptobot_invoice_keyboard(payment_id: int, invoice_url: str, lang: str = "ru") -> InlineKeyboardMarkup:
+    pay_text = "💵 Pay invoice" if lang == "en" else "💵 Оплатить счет"
+    check_text = "✅ Check payment" if lang == "en" else "✅ Проверить оплату"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=pay_text, url=invoice_url)],
+            [InlineKeyboardButton(text=check_text, callback_data=f"cryptobot:check:{payment_id}")],
+        ]
+    )
 
 
 def help_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
@@ -569,6 +632,48 @@ def format_transactions(transactions: list, lang: str = "ru") -> str:
     return "\n".join(lines)
 
 
+async def send_cryptobot_invoice(
+    message: Message,
+    user_id: int,
+    amount_rub: int,
+    purpose: str,
+    lang: str,
+    product_code: str = "",
+    product_title: str = "",
+    quantity: int = 0,
+    contact: str = "",
+) -> None:
+    description = (
+        f"Balance top-up: {amount_rub} RUB"
+        if purpose == "topup"
+        else f"{product_title} - {quantity or 1} pcs"
+    )
+    invoice = await create_cryptobot_invoice(amount_rub, description, f"{purpose}:{user_id}:{amount_rub}")
+    payment = await create_crypto_payment(
+        user_id=user_id,
+        invoice_id=int(invoice["invoice_id"]),
+        purpose=purpose,
+        amount_rub=amount_rub,
+        product_code=product_code,
+        product_title=product_title,
+        quantity=quantity,
+        contact=contact,
+    )
+    invoice_url = invoice.get("bot_invoice_url") or invoice.get("pay_url")
+    if not invoice_url:
+        raise RuntimeError("CryptoBot invoice URL is missing")
+    text = (
+        f"{ce('news_money')} <b>Crypto Bot invoice</b>\n\n"
+        f"Amount: <b>{amount_rub} ₽</b>\n\n"
+        "Pay the invoice, then press <b>Check payment</b>."
+        if lang == "en"
+        else f"{ce('news_money')} <b>Счет Crypto Bot</b>\n\n"
+        f"Сумма: <b>{amount_rub} ₽</b>\n\n"
+        "Оплатите счет, затем нажмите <b>Проверить оплату</b>."
+    )
+    await message.answer(text, reply_markup=cryptobot_invoice_keyboard(payment["id"], invoice_url, lang))
+
+
 @router.message(CommandStart())
 async def start(message: Message) -> None:
     user = await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
@@ -824,6 +929,33 @@ async def topup_method_placeholder(callback: CallbackQuery, state: FSMContext) -
     data = await state.get_data()
     amount = int(data.get("topup_amount", 0))
     method = callback.data.split(":")[-1]
+    if method == "cryptobot":
+        if amount <= 0:
+            await callback.message.answer(
+                "Send the top-up amount again." if lang == "en" else "Отправьте сумму пополнения еще раз."
+            )
+            await callback.answer()
+            return
+        try:
+            await send_cryptobot_invoice(
+                callback.message,
+                callback.from_user.id,
+                amount,
+                "topup",
+                lang,
+            )
+            await state.clear()
+        except Exception:
+            logging.exception("Could not create Crypto Bot top-up invoice")
+            text = (
+                "Could not create Crypto Bot invoice. Please try again later."
+                if lang == "en"
+                else "Не удалось создать счет Crypto Bot. Попробуйте позже."
+            )
+            await callback.message.answer(text)
+        await callback.answer()
+        return
+
     names = {
         "platega": "Platega",
         "cryptobot": "Crypto Bot",
@@ -867,6 +999,20 @@ async def profile_promo(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     text = f"{ce('fire')} No active promo codes right now." if lang == "en" else f"{ce('fire')} Сейчас активных промокодов нет."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "payment:cryptobot")
+async def start_crypto_order(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await state.set_state(CryptoOrderState.waiting_for_contact)
+    await state.update_data(crypto_quantity=1, crypto_purpose="order")
+    text = (
+        f"{ce('support')} Send your Telegram username in this format: <b>@username</b>"
+        if lang == "en"
+        else f"{ce('support')} Напишите ваш Telegram юзернейм в таком формате: <b>@username</b>"
+    )
+    await callback.message.answer(text)
     await callback.answer()
 
 
@@ -1043,6 +1189,18 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
     if method != "balance":
         product = await get_product_config(PRODUCT_CODE)
         total = int(product["price_rub"]) * quantity
+        if method == "cryptobot":
+            await state.set_state(CryptoOrderState.waiting_for_contact)
+            await state.update_data(crypto_quantity=quantity, crypto_purpose="bulk_order")
+            text = (
+                f"{ce('support')} Send your Telegram username in this format: <b>@username</b>"
+                if lang == "en"
+                else f"{ce('support')} Напишите ваш Telegram юзернейм в таком формате: <b>@username</b>"
+            )
+            await callback.message.answer(text)
+            await callback.answer()
+            return
+
         method_names = {"platega": "Platega", "cryptobot": "Crypto Bot"}
         method_name = method_names.get(method, method)
         text = (
@@ -1181,6 +1339,123 @@ async def cancel_bulk_order(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     text = "Bulk purchase cancelled." if lang == "en" else "Покупка нескольких товаров отменена."
     await callback.message.answer(text, reply_markup=product_keyboard(lang))
+    await callback.answer()
+
+
+@router.message(CryptoOrderState.waiting_for_contact)
+async def receive_crypto_order_contact(message: Message, state: FSMContext) -> None:
+    await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    lang = await get_lang(message.from_user.id)
+    contact = (message.text or "").strip()
+    if not TELEGRAM_USERNAME_RE.fullmatch(contact):
+        error_text = (
+            f"{ce('support')} Please send only your Telegram username in this format: <b>@username</b>"
+            if lang == "en"
+            else f"{ce('support')} Пожалуйста, отправьте только ваш Telegram юзернейм в формате: <b>@username</b>"
+        )
+        await message.answer(error_text)
+        return
+
+    data = await state.get_data()
+    quantity = int(data.get("crypto_quantity") or 1)
+    purpose = data.get("crypto_purpose") or "order"
+    product = await get_product_config(PRODUCT_CODE)
+    total = int(product["price_rub"]) * quantity
+    title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
+
+    try:
+        await send_cryptobot_invoice(
+            message,
+            message.from_user.id,
+            total,
+            purpose,
+            lang,
+            product_code=PRODUCT_CODE,
+            product_title=title,
+            quantity=quantity,
+            contact=contact,
+        )
+        await state.clear()
+    except Exception:
+        logging.exception("Could not create Crypto Bot order invoice")
+        text = (
+            "Could not create Crypto Bot invoice. Please try again later."
+            if lang == "en"
+            else "Не удалось создать счет Crypto Bot. Попробуйте позже."
+        )
+        await message.answer(text, reply_markup=product_keyboard(lang))
+
+
+@router.callback_query(F.data.startswith("cryptobot:check:"))
+async def check_cryptobot_payment(callback: CallbackQuery, bot: Bot) -> None:
+    lang = await get_lang(callback.from_user.id)
+    payment_id = int(callback.data.split(":")[-1])
+    payment = await get_crypto_payment(payment_id)
+    if not payment or payment["user_id"] != callback.from_user.id:
+        await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
+        return
+
+    if payment["status"] == "paid":
+        text = (
+            f"{ce('ok')} This payment has already been credited."
+            if lang == "en"
+            else f"{ce('ok')} Этот платеж уже был зачислен."
+        )
+        await callback.message.answer(text)
+        await callback.answer()
+        return
+
+    try:
+        invoice = await get_cryptobot_invoice(int(payment["invoice_id"]))
+    except Exception:
+        logging.exception("Could not check Crypto Bot invoice")
+        await callback.answer(
+            "Could not check payment. Try again later." if lang == "en" else "Не удалось проверить оплату. Попробуйте позже.",
+            show_alert=True,
+        )
+        return
+
+    if not invoice or invoice.get("status") != "paid":
+        await callback.answer("Payment has not arrived yet." if lang == "en" else "Оплата еще не поступила.", show_alert=True)
+        return
+
+    username = f"@{callback.from_user.username}" if callback.from_user.username else "username не указан"
+    order_status = "Оплачен Crypto Bot, ожидает обработки"
+    completed = await complete_crypto_payment(payment_id, username, order_status)
+    if not completed:
+        await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
+        return
+
+    if completed["purpose"] == "topup":
+        text = (
+            f"{ce('ok')} Balance topped up by <b>{int(completed['amount_rub'])} ₽</b>."
+            if lang == "en"
+            else f"{ce('ok')} Баланс пополнен на <b>{int(completed['amount_rub'])} ₽</b>."
+        )
+    else:
+        text = (
+            f"{ce('ok')} Payment received. Order created and is visible in My purchases."
+            if lang == "en"
+            else f"{ce('ok')} Оплата получена. Заказ создан и появился в разделе «Мои покупки»."
+        )
+        if ADMIN_ID:
+            admin_message = (
+                f"{ce('cart')} <b>Новый заказ Crypto Bot</b>\n\n"
+                f"Товар: {completed['product_title']}\n"
+                f"Сумма: {int(completed['amount_rub'])} ₽\n"
+                f"Оплата: Crypto Bot\n"
+                f"Покупатель: {username}\n"
+                f"ID: <code>{callback.from_user.id}</code>\n"
+                f"Контакт: {completed['contact']}"
+            )
+            try:
+                await bot.send_message(int(ADMIN_ID), admin_message)
+            except ValueError:
+                logging.exception("ADMIN_ID must be a number")
+            except Exception:
+                logging.exception("Could not send Crypto Bot order to admin")
+
+    await callback.message.answer(text, reply_markup=start_keyboard(lang))
     await callback.answer()
 
 

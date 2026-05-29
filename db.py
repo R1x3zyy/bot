@@ -74,6 +74,22 @@ async def ensure_schema() -> None:
                 description TEXT NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
+
+            CREATE TABLE IF NOT EXISTS crypto_payments (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                invoice_id BIGINT NOT NULL UNIQUE,
+                purpose TEXT NOT NULL,
+                amount_rub NUMERIC(12, 2) NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                product_code TEXT NOT NULL DEFAULT '',
+                product_title TEXT NOT NULL DEFAULT '',
+                quantity INTEGER NOT NULL DEFAULT 0,
+                contact TEXT NOT NULL DEFAULT '',
+                order_id BIGINT REFERENCES orders(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                paid_at TIMESTAMPTZ
+            );
             """
         )
         conn.execute(
@@ -181,6 +197,18 @@ async def create_order(
         ).fetchone()
 
 
+async def add_user_balance(user_id: int, amount_rub: int, description: str) -> None:
+    with get_conn() as conn:
+        conn.execute("UPDATE users SET balance = balance + %s WHERE id = %s", (amount_rub, user_id))
+        conn.execute(
+            """
+            INSERT INTO transactions (user_id, type, amount, description)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (user_id, "topup", amount_rub, description),
+        )
+
+
 async def create_balance_order(
     user_id: int,
     username: str,
@@ -219,6 +247,95 @@ async def create_balance_order(
             (user_id, "purchase", -price_rub, f"Balance payment: {product_title}"),
         )
         return order
+
+
+async def create_crypto_payment(
+    user_id: int,
+    invoice_id: int,
+    purpose: str,
+    amount_rub: int,
+    product_code: str = "",
+    product_title: str = "",
+    quantity: int = 0,
+    contact: str = "",
+) -> dict:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            INSERT INTO crypto_payments (
+                user_id, invoice_id, purpose, amount_rub, product_code, product_title, quantity, contact
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (user_id, invoice_id, purpose, amount_rub, product_code, product_title, quantity, contact),
+        ).fetchone()
+
+
+async def get_crypto_payment(payment_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM crypto_payments WHERE id = %s", (payment_id,)).fetchone()
+
+
+async def complete_crypto_payment(payment_id: int, username: str, order_status: str) -> dict | None:
+    with get_conn() as conn:
+        payment = conn.execute(
+            "SELECT * FROM crypto_payments WHERE id = %s FOR UPDATE",
+            (payment_id,),
+        ).fetchone()
+        if not payment:
+            return None
+        if payment["status"] == "paid":
+            return payment
+
+        order_id = None
+        if payment["purpose"] == "topup":
+            conn.execute(
+                "UPDATE users SET balance = balance + %s WHERE id = %s",
+                (payment["amount_rub"], payment["user_id"]),
+            )
+            conn.execute(
+                """
+                INSERT INTO transactions (user_id, type, amount, description)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (payment["user_id"], "topup", payment["amount_rub"], "Crypto Bot top-up"),
+            )
+        elif payment["purpose"] in {"order", "bulk_order"}:
+            order = conn.execute(
+                """
+                INSERT INTO orders (user_id, username, product_code, product_title, price_rub, contact, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (
+                    payment["user_id"],
+                    username,
+                    payment["product_code"],
+                    payment["product_title"],
+                    payment["amount_rub"],
+                    payment["contact"],
+                    order_status,
+                ),
+            ).fetchone()
+            order_id = order["id"]
+            conn.execute(
+                """
+                INSERT INTO transactions (user_id, type, amount, description)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (payment["user_id"], "crypto_payment", payment["amount_rub"], f"Crypto Bot: {payment['product_title']}"),
+            )
+
+        return conn.execute(
+            """
+            UPDATE crypto_payments
+            SET status = 'paid', paid_at = now(), order_id = COALESCE(%s, order_id)
+            WHERE id = %s
+            RETURNING *
+            """,
+            (order_id, payment_id),
+        ).fetchone()
 
 
 async def update_order_status(order_id: int, status: str) -> dict | None:
