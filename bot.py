@@ -1005,14 +1005,31 @@ async def profile_promo(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "payment:cryptobot")
 async def start_crypto_order(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
-    await state.set_state(CryptoOrderState.waiting_for_contact)
-    await state.update_data(crypto_quantity=1, crypto_purpose="order")
-    text = (
-        f"{ce('support')} Send your Telegram username in this format: <b>@username</b>"
-        if lang == "en"
-        else f"{ce('support')} Напишите ваш Telegram юзернейм в таком формате: <b>@username</b>"
-    )
-    await callback.message.answer(text)
+    await state.clear()
+    await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
+    product = await get_product_config(PRODUCT_CODE)
+    price = int(product["price_rub"])
+    contact = f"@{callback.from_user.username}" if callback.from_user.username else f"id:{callback.from_user.id}"
+    try:
+        await send_cryptobot_invoice(
+            callback.message,
+            callback.from_user.id,
+            price,
+            "order",
+            lang,
+            product_code=PRODUCT_CODE,
+            product_title=product["title"],
+            quantity=1,
+            contact=contact,
+        )
+    except Exception:
+        logging.exception("Could not create Crypto Bot order invoice")
+        text = (
+            "Could not create Crypto Bot invoice. Please try again later."
+            if lang == "en"
+            else "Не удалось создать счет Crypto Bot. Попробуйте позже."
+        )
+        await callback.message.answer(text, reply_markup=product_keyboard(lang))
     await callback.answer()
 
 
@@ -1190,14 +1207,30 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
         product = await get_product_config(PRODUCT_CODE)
         total = int(product["price_rub"]) * quantity
         if method == "cryptobot":
-            await state.set_state(CryptoOrderState.waiting_for_contact)
-            await state.update_data(crypto_quantity=quantity, crypto_purpose="bulk_order")
-            text = (
-                f"{ce('support')} Send your Telegram username in this format: <b>@username</b>"
-                if lang == "en"
-                else f"{ce('support')} Напишите ваш Telegram юзернейм в таком формате: <b>@username</b>"
-            )
-            await callback.message.answer(text)
+            await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
+            contact = f"@{callback.from_user.username}" if callback.from_user.username else f"id:{callback.from_user.id}"
+            title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
+            try:
+                await send_cryptobot_invoice(
+                    callback.message,
+                    callback.from_user.id,
+                    total,
+                    "bulk_order",
+                    lang,
+                    product_code=PRODUCT_CODE,
+                    product_title=title,
+                    quantity=quantity,
+                    contact=contact,
+                )
+                await state.clear()
+            except Exception:
+                logging.exception("Could not create Crypto Bot bulk invoice")
+                text = (
+                    "Could not create Crypto Bot invoice. Please try again later."
+                    if lang == "en"
+                    else "Не удалось создать счет Crypto Bot. Попробуйте позже."
+                )
+                await callback.message.answer(text, reply_markup=bulk_payment_keyboard(quantity, lang))
             await callback.answer()
             return
 
