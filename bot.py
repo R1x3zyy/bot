@@ -41,6 +41,7 @@ PRODUCT_CODE = "gemini_link_18_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 CE = {
     "gemini": ("5321197740800120767", "🤖"),
+    "shop": ("5309801015015405183", "🎁"),
     "planet": ("5454102570312166471", "🪐"),
     "link": ("5454068128969417666", "🔗"),
     "stock": ("5348149223223211884", "📦"),
@@ -206,7 +207,7 @@ async def home_text(lang: str = "ru") -> str:
 
     return (
         f"{ce('spark')} <b>Добро пожаловать в магазин!</b>\n\n"
-        f"{ce('gemini')} <b>В нашем магазине вы можете приобрести:</b>\n"
+        f"{ce('shop')} <b>В нашем магазине вы можете приобрести:</b>\n"
         "<blockquote>"
         f"{ce('gemini')} {product['title']}\n"
         f"{ce('link')} Активация по персональной ссылке"
