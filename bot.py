@@ -3,9 +3,10 @@ import html
 import logging
 import os
 import re
+from typing import Any, Awaitable, Callable
 
 import aiohttp
-from aiogram import Bot, Dispatcher, F, Router
+from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
@@ -18,6 +19,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     Message,
     ReplyKeyboardRemove,
+    TelegramObject,
 )
 from dotenv import load_dotenv
 
@@ -47,6 +49,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 REVIEWS_CHANNEL_ID = os.getenv("REVIEWS_CHANNEL_ID")
+REQUIRED_CHANNEL_ID = os.getenv("REQUIRED_CHANNEL_ID", "@r1x3zyyshop")
+REQUIRED_CHANNEL_URL = os.getenv("REQUIRED_CHANNEL_URL", "https://t.me/r1x3zyyshop")
 CRYPTOBOT_TOKEN = os.getenv("CRYPTOBOT_TOKEN")
 CRYPTOBOT_API_URL = os.getenv("CRYPTOBOT_API_URL", "https://pay.crypt.bot/api")
 PRODUCT_CODE = "gemini_link_18_month"
@@ -183,6 +187,71 @@ router = Router()
 
 def is_admin(user_id: int) -> bool:
     return bool(ADMIN_ID and ADMIN_ID.isdigit() and int(ADMIN_ID) == user_id)
+
+
+def subscription_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
+    subscribe_text = "📣 Subscribe" if lang == "en" else "📣 Подписаться"
+    check_text = "✅ Check subscription" if lang == "en" else "✅ Проверить подписку"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=subscribe_text, url=REQUIRED_CHANNEL_URL)],
+            [InlineKeyboardButton(text=check_text, callback_data="subscription:check")],
+        ]
+    )
+
+
+def subscription_text(lang: str = "ru") -> str:
+    if lang == "en":
+        return (
+            f"{ce('news_announce')} <b>Subscribe to the channel first</b>\n\n"
+            "After subscribing, press <b>Check subscription</b>."
+        )
+
+    return (
+        f"{ce('news_announce')} <b>Сначала подпишитесь на канал</b>\n\n"
+        "После подписки нажмите <b>Проверить подписку</b>."
+    )
+
+
+async def is_subscribed(bot: Bot, user_id: int) -> bool:
+    if not REQUIRED_CHANNEL_ID or is_admin(user_id):
+        return True
+
+    try:
+        member = await bot.get_chat_member(REQUIRED_CHANNEL_ID, user_id)
+    except Exception:
+        logging.exception("Could not check required channel subscription")
+        return False
+
+    status = getattr(member.status, "value", str(member.status))
+    return status not in {"left", "kicked"}
+
+
+class SubscriptionMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
+    ) -> Any:
+        user = data.get("event_from_user")
+        bot = data.get("bot")
+        if not user or not bot or not REQUIRED_CHANNEL_ID:
+            return await handler(event, data)
+
+        if isinstance(event, CallbackQuery) and event.data == "subscription:check":
+            return await handler(event, data)
+
+        if await is_subscribed(bot, user.id):
+            return await handler(event, data)
+
+        lang = await get_lang(user.id)
+        if isinstance(event, CallbackQuery):
+            await event.answer("Подпишитесь на канал, чтобы продолжить.", show_alert=True)
+            await event.message.answer(subscription_text(lang), reply_markup=subscription_keyboard(lang))
+        elif isinstance(event, Message):
+            await event.answer(subscription_text(lang), reply_markup=subscription_keyboard(lang))
+        return None
 
 
 async def get_lang(user_id: int) -> str:
@@ -877,6 +946,21 @@ async def start(message: Message) -> None:
     except Exception:
         logging.exception("Could not delete reply keyboard cleanup message")
     await message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
+
+
+@router.callback_query(F.data == "subscription:check")
+async def check_subscription(callback: CallbackQuery, bot: Bot) -> None:
+    user = await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
+    lang = user["language"] if user["language"] in {"ru", "en"} else "ru"
+    if not await is_subscribed(bot, callback.from_user.id):
+        await callback.answer("Подписка не найдена.", show_alert=True)
+        await callback.message.answer(subscription_text(lang), reply_markup=subscription_keyboard(lang))
+        return
+
+    text = f"{ce('ok')} Subscription confirmed." if lang == "en" else f"{ce('ok')} Подписка подтверждена."
+    await callback.message.answer(text)
+    await callback.message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
+    await callback.answer()
 
 
 @router.message(Command("myid"))
@@ -1943,6 +2027,8 @@ async def main() -> None:
     )
 
     dispatcher = Dispatcher()
+    dispatcher.message.middleware(SubscriptionMiddleware())
+    dispatcher.callback_query.middleware(SubscriptionMiddleware())
     dispatcher.include_router(router)
 
     await dispatcher.start_polling(bot)
