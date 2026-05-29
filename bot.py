@@ -102,7 +102,7 @@ async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"🔗 {product['title']} | {stock} {item_suffix}",
+                    text=f"🤖 {product['title']} | {stock} {item_suffix}",
                     callback_data=f"product:{PRODUCT_CODE}",
                 )
             ],
