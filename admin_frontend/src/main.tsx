@@ -7,10 +7,12 @@ import {
   Database,
   Link as LinkIcon,
   LogOut,
+  Moon,
   Package,
   RefreshCw,
   Save,
   Settings,
+  Sun,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -81,6 +83,7 @@ function App() {
   const [login, setLogin] = useState(localStorage.getItem('admin_login') || 'admin');
   const [password, setPassword] = useState(localStorage.getItem('admin_password') || '');
   const [isAuthed, setIsAuthed] = useState(Boolean(localStorage.getItem('admin_password')));
+  const [theme, setTheme] = useState(localStorage.getItem('admin_theme') || 'light');
   const [tab, setTab] = useState<Tab>('orders');
   const [stats, setStats] = useState<Stats>({ users: 0, orders: 0, links: 0 });
   const [orders, setOrders] = useState<Order[]>([]);
@@ -145,6 +148,11 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('admin_theme', theme);
+  }, [theme]);
+
   async function submitLogin(event: React.FormEvent) {
     event.preventDefault();
     await loadAll();
@@ -205,6 +213,10 @@ function App() {
     setIsAuthed(false);
   }
 
+  function toggleTheme() {
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+  }
+
   if (!isAuthed) {
     return (
       <main className="login-screen">
@@ -241,6 +253,15 @@ function App() {
           <p>Управление товаром, ссылками и заказами</p>
         </div>
         <div className="actions">
+          <button
+            type="button"
+            className="ghost"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить темную тему'}
+            title={theme === 'dark' ? 'Светлая тема' : 'Темная тема'}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
           <button type="button" className="ghost" onClick={loadAll} disabled={loading}>
             <RefreshCw size={18} />
           </button>
