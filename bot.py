@@ -578,14 +578,16 @@ async def profile_ref(callback: CallbackQuery, bot: Bot) -> None:
             "<b>👥 Referral system</b>\n\n"
             f"Your code: <code>{user['ref_code']}</code>\n"
             f"Your link: {ref_link}\n\n"
-            "Referral rewards can be configured later."
+            "Invite users with your link. For every 5 invited users who make at least one purchase, "
+            "you receive 1 Gemini Link as a gift."
         )
     else:
         text = (
             "<b>👥 Реферальная система</b>\n\n"
             f"Ваш код: <code>{user['ref_code']}</code>\n"
             f"Ваша ссылка: {ref_link}\n\n"
-            "Начисления за приглашения можно подключить отдельными правилами."
+            "Приглашайте пользователей по своей ссылке. За каждых 5 приглашенных, "
+            "которые сделают хотя бы одну покупку, вы получаете 1 Gemini Link в подарок."
         )
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
     await callback.answer()
