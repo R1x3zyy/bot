@@ -84,7 +84,7 @@ async def ensure_schema() -> None:
                 "gemini_link_18_month",
                 "Gemini Link 18 months",
                 Decimal("145.00"),
-                Decimal("2.10"),
+                Decimal("2.00"),
                 (
                     "Гарантийная поддержка распространяется на момент активации персональной ссылки.\n\n"
                     "Google AI Pro на 18 месяцев с доступом к возможностям Gemini, Veo, генерации изображений, "
@@ -115,6 +115,14 @@ async def ensure_user(user_id: int, username: str | None, first_name: str | None
 async def get_user(user_id: int) -> dict | None:
     with get_conn() as conn:
         return conn.execute("SELECT * FROM users WHERE id = %s", (user_id,)).fetchone()
+
+
+async def update_user_language(user_id: int, language: str) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            "UPDATE users SET language = %s WHERE id = %s RETURNING *",
+            (language, user_id),
+        ).fetchone()
 
 
 async def add_links(links: list[str]) -> int:
