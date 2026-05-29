@@ -10,6 +10,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    BotCommand,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -701,6 +702,12 @@ async def main() -> None:
     await ensure_schema()
 
     bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    await bot.set_my_commands(
+        [
+            BotCommand(command="start", description="Открыть магазин"),
+        ]
+    )
+
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
 
