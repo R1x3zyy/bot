@@ -832,16 +832,16 @@ async def quantity_text(lang: str = "ru") -> str:
     price = int(product["price_rub"])
     if lang == "en":
         return (
-            f"{ce('cart')} <b>Choose quantity</b>\n\n"
-            f"{ce('stock')} Product: <b>{product['title']}</b>\n"
+            f"🔢 <b>Choose quantity</b>\n\n"
+            f"{ce('gemini')} Product: <b>{product['title']}</b>\n"
             f"{ce('news_money')} Price per item: <b>{price} ₽</b>\n"
             f"{ce('stock')} In stock: <b>{stock} pcs.</b>\n\n"
             "Choose quantity below or press <b>Custom quantity</b>."
         )
 
     return (
-        f"{ce('cart')} <b>Выберите количество</b>\n\n"
-        f"{ce('stock')} Товар: <b>{product['title']}</b>\n"
+        f"🔢 <b>Выберите количество</b>\n\n"
+        f"{ce('gemini')} Товар: <b>{product['title']}</b>\n"
         f"{ce('news_money')} Цена за 1 шт.: <b>{price} ₽</b>\n"
         f"{ce('stock')} В наличии: <b>{stock} шт.</b>\n\n"
         "Выберите количество ниже или нажмите <b>Своё количество</b>."
