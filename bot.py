@@ -59,6 +59,12 @@ CE = {
     "news_catalog": ("5229064374403998351", "🛍"),
     "news_bolt": ("5456140674028019486", "⚡️"),
     "news_money": ("5409048419211682843", "💵"),
+    "news_chat": ("5443038326535759644", "💬"),
+    "news_announce": ("5424818078833715060", "📣"),
+    "news_question": ("5436113877181941026", "❓"),
+    "news_shield": ("5251203410396458957", "🛡"),
+    "news_gear": ("5341715473882955310", "⚙️"),
+    "news_pencil": ("5395444784611480792", "✏️"),
 }
 
 
@@ -183,10 +189,10 @@ def misc_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     back_text = "🔙 Back" if lang == "en" else "🔙 Назад"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🤝 Тех поддержка", url="https://t.me/R1x3zyy")],
+            [InlineKeyboardButton(text="💬 Тех поддержка", url="https://t.me/R1x3zyy")],
             [
                 InlineKeyboardButton(text="📣 Наш канал", url="https://t.me/r1x3zyyshop"),
-                InlineKeyboardButton(text="📝 Отзывы", callback_data="misc:reviews"),
+                InlineKeyboardButton(text="✏️ Отзывы", callback_data="misc:reviews"),
             ],
             [InlineKeyboardButton(text="❓ FAQ", callback_data="misc:faq")],
             [InlineKeyboardButton(text="🛡 Политика конфид.", callback_data="misc:privacy")],
@@ -359,26 +365,36 @@ def help_text(lang: str = "ru") -> str:
 def misc_text(lang: str = "ru") -> str:
     if lang == "en":
         return (
-            f"{ce('spark')} <b>Other</b>\n\n"
-            "Here you can find support, documents, FAQ and useful links."
+            f"{ce('news_gear')} <b>Other</b>\n\n"
+            f"{ce('news_chat')} Support\n"
+            f"{ce('news_announce')} Our channel\n"
+            f"{ce('news_pencil')} Reviews\n"
+            f"{ce('news_question')} FAQ\n"
+            f"{ce('news_shield')} Privacy policy\n"
+            f"{ce('news_gear')} User agreement"
         )
 
     return (
-        f"{ce('spark')} <b>Прочее</b>\n\n"
-        "Здесь собраны поддержка, документы, FAQ и полезные ссылки."
+        f"{ce('news_gear')} <b>Прочее</b>\n\n"
+        f"{ce('news_chat')} Тех поддержка\n"
+        f"{ce('news_announce')} Наш канал\n"
+        f"{ce('news_pencil')} Отзывы\n"
+        f"{ce('news_question')} FAQ\n"
+        f"{ce('news_shield')} Политика конфиденциальности\n"
+        f"{ce('news_gear')} Пользовательское соглашение"
     )
 
 
 def faq_text(lang: str = "ru") -> str:
     if lang == "en":
         return (
-            "❓ <b>FAQ</b>\n\n"
+            f"{ce('news_question')} <b>FAQ</b>\n\n"
             "After placing an order, send your Telegram username in the <b>@username</b> format.\n\n"
             "Delivery is processed after order confirmation. If links are out of stock, the order can be reserved."
         )
 
     return (
-        "❓ <b>FAQ</b>\n\n"
+        f"{ce('news_question')} <b>FAQ</b>\n\n"
         "После оформления заказа отправьте свой Telegram юзернейм в формате <b>@username</b>.\n\n"
         "Выдача проходит после подтверждения заказа. Если ссылок временно нет, заказ можно зарезервировать."
     )
@@ -387,12 +403,12 @@ def faq_text(lang: str = "ru") -> str:
 def privacy_text(lang: str = "ru") -> str:
     if lang == "en":
         return (
-            "🛡 <b>Privacy Policy</b>\n\n"
+            f"{ce('news_shield')} <b>Privacy Policy</b>\n\n"
             "https://telegra.ph/Politika-konfidencialnosti-04-01-26"
         )
 
     return (
-        "🛡 <b>Политика конфиденциальности</b>\n\n"
+        f"{ce('news_shield')} <b>Политика конфиденциальности</b>\n\n"
         "https://telegra.ph/Politika-konfidencialnosti-04-01-26"
     )
 
@@ -400,18 +416,22 @@ def privacy_text(lang: str = "ru") -> str:
 def terms_text(lang: str = "ru") -> str:
     if lang == "en":
         return (
-            "⚙️ <b>User Agreement</b>\n\n"
+            f"{ce('news_gear')} <b>User Agreement</b>\n\n"
             "https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19"
         )
 
     return (
-        "⚙️ <b>Пользовательское соглашение</b>\n\n"
+        f"{ce('news_gear')} <b>Пользовательское соглашение</b>\n\n"
         "https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19"
     )
 
 
 def reviews_text(lang: str = "ru") -> str:
-    return "📝 Reviews will be added later." if lang == "en" else "📝 Отзывы будут добавлены позже."
+    return (
+        f"{ce('news_pencil')} Reviews will be added later."
+        if lang == "en"
+        else f"{ce('news_pencil')} Отзывы будут добавлены позже."
+    )
 
 
 async def profile_text(user_id: int, lang: str = "ru") -> str:
