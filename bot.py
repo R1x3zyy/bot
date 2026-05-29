@@ -84,6 +84,10 @@ class OrderState(StatesGroup):
     waiting_for_contact = State()
 
 
+class TopUpState(StatesGroup):
+    waiting_for_amount = State()
+
+
 class AdminState(StatesGroup):
     waiting_for_links = State()
 
@@ -151,7 +155,7 @@ def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="💵 Pay Platega", callback_data="payment:platega"),
             ],
             [InlineKeyboardButton(text="💵 Pay Crypto Bot", callback_data="payment:cryptobot")],
-            [InlineKeyboardButton(text="💵 Pay Bybit (USDT)", callback_data="payment:bybit")],
+            [InlineKeyboardButton(text="💵 Pay BEP20 USDT", callback_data="payment:bep20")],
             [InlineKeyboardButton(text="💵 Pay with balance", callback_data="order:start")],
             [InlineKeyboardButton(text="💵 Top up balance", callback_data="profile:topup")],
             [InlineKeyboardButton(text="← Back", callback_data="catalog:open")],
@@ -164,7 +168,7 @@ def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="💵 Оплатить Platega", callback_data="payment:platega"),
             ],
             [InlineKeyboardButton(text="💵 Оплатить Crypto Bot", callback_data="payment:cryptobot")],
-            [InlineKeyboardButton(text="💵 Оплатить Bybit (USDT)", callback_data="payment:bybit")],
+            [InlineKeyboardButton(text="💵 Оплатить BEP20 USDT", callback_data="payment:bep20")],
             [InlineKeyboardButton(text="💵 Заплатить балансом", callback_data="order:start")],
             [InlineKeyboardButton(text="💵 Пополнить баланс", callback_data="profile:topup")],
             [InlineKeyboardButton(text="← Назад", callback_data="catalog:open")],
@@ -174,6 +178,25 @@ def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=buttons
     )
+
+
+def topup_payment_keyboard(amount: int, lang: str = "ru") -> InlineKeyboardMarkup:
+    if lang == "en":
+        buttons = [
+            [InlineKeyboardButton(text=f"Platega · {amount} ₽", callback_data="topup:method:platega")],
+            [InlineKeyboardButton(text=f"Crypto Bot · {amount} ₽", callback_data="topup:method:cryptobot")],
+            [InlineKeyboardButton(text=f"BEP20 USDT · {amount} ₽", callback_data="topup:method:bep20")],
+            [InlineKeyboardButton(text="Cancel", callback_data="topup:cancel")],
+        ]
+    else:
+        buttons = [
+            [InlineKeyboardButton(text=f"Platega · {amount} ₽", callback_data="topup:method:platega")],
+            [InlineKeyboardButton(text=f"Crypto Bot · {amount} ₽", callback_data="topup:method:cryptobot")],
+            [InlineKeyboardButton(text=f"BEP20 USDT · {amount} ₽", callback_data="topup:method:bep20")],
+            [InlineKeyboardButton(text="Отмена", callback_data="topup:cancel")],
+        ]
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def help_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
@@ -650,7 +673,8 @@ async def open_reviews(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "menu:home")
-async def open_home(callback: CallbackQuery) -> None:
+async def open_home(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     lang = await get_lang(callback.from_user.id)
     await callback.message.edit_text(await home_text(lang), reply_markup=start_keyboard(lang))
     await callback.answer()
@@ -672,7 +696,8 @@ async def open_product(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "profile:open")
-async def open_profile(callback: CallbackQuery) -> None:
+async def open_profile(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     lang = await get_lang(callback.from_user.id)
     await callback.message.edit_text(await profile_text(callback.from_user.id, lang), reply_markup=profile_keyboard(lang))
@@ -680,13 +705,83 @@ async def open_profile(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "profile:topup")
-async def profile_topup(callback: CallbackQuery) -> None:
+async def profile_topup(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
+    await state.set_state(TopUpState.waiting_for_amount)
     text = (
-        "💵 Balance top-up is handled by the administrator for now. Message support with the amount and payment method."
+        "<b>Balance top-up</b>\n\n"
+        "Send the amount in rubles. If Platega and Crypto Bot are configured, you will choose a payment method next."
         if lang == "en"
-        else "💵 Пополнение баланса пока проходит через администратора. Напишите сумму и способ оплаты в поддержку."
+        else "<b>Пополнение баланса</b>\n\n"
+        "Отправьте сумму в рублях. Если настроены Platega и Crypto Bot, дальше выберете способ оплаты."
     )
+    await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await callback.answer()
+
+
+@router.message(TopUpState.waiting_for_amount)
+async def receive_topup_amount(message: Message, state: FSMContext) -> None:
+    lang = await get_lang(message.from_user.id)
+    raw_amount = (message.text or "").strip().replace(" ", "").replace(",", ".")
+
+    if not raw_amount.replace(".", "", 1).isdigit():
+        text = (
+            "Please send only the amount in rubles, for example: <b>1500</b>"
+            if lang == "en"
+            else "Отправьте только сумму в рублях, например: <b>1500</b>"
+        )
+        await message.answer(text)
+        return
+
+    amount = int(float(raw_amount))
+    if amount <= 0:
+        text = "Amount must be greater than zero." if lang == "en" else "Сумма должна быть больше нуля."
+        await message.answer(text)
+        return
+
+    await state.update_data(topup_amount=amount)
+    text = (
+        f"<b>Balance top-up</b>\n\n"
+        f"Amount: <b>{amount} ₽</b>\n\n"
+        "Choose a payment method:"
+        if lang == "en"
+        else f"<b>Пополнение баланса</b>\n\n"
+        f"Сумма: <b>{amount} ₽</b>\n\n"
+        "Выберите способ оплаты:"
+    )
+    await message.answer(text, reply_markup=topup_payment_keyboard(amount, lang))
+
+
+@router.callback_query(F.data.startswith("topup:method:"))
+async def topup_method_placeholder(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
+    data = await state.get_data()
+    amount = int(data.get("topup_amount", 0))
+    method = callback.data.split(":")[-1]
+    names = {
+        "platega": "Platega",
+        "cryptobot": "Crypto Bot",
+        "bep20": "BEP20 USDT",
+    }
+    method_name = names.get(method, "payment")
+    text = (
+        f"{ce('news_money')} <b>{method_name}</b>\n\n"
+        f"Amount: <b>{amount} ₽</b>\n\n"
+        "This payment API will be connected later."
+        if lang == "en"
+        else f"{ce('news_money')} <b>{method_name}</b>\n\n"
+        f"Сумма: <b>{amount} ₽</b>\n\n"
+        "API этого способа оплаты будет подключен позже."
+    )
+    await callback.message.edit_text(text, reply_markup=topup_payment_keyboard(amount, lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "topup:cancel")
+async def cancel_topup(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await state.clear()
+    text = "Top-up cancelled." if lang == "en" else "Пополнение отменено."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
     await callback.answer()
 
@@ -717,7 +812,7 @@ async def payment_placeholder(callback: CallbackQuery) -> None:
         "promo": "промокоды",
         "platega": "Platega",
         "cryptobot": "Crypto Bot",
-        "bybit": "Bybit (USDT)",
+        "bep20": "BEP20 USDT",
     }
     method_name = names.get(method, "оплата")
     if lang == "en":
