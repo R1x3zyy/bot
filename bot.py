@@ -21,8 +21,9 @@ from dotenv import load_dotenv
 
 from db import (
     add_links,
+    admin_stats,
     count_available_links,
-    create_order,
+    create_balance_order,
     ensure_schema,
     ensure_user,
     get_product_config,
@@ -78,6 +79,26 @@ def format_price(product: dict) -> str:
     price_rub = int(product["price_rub"])
     price_usd = float(product["price_usd"])
     return f"{price_rub} ₽ / {price_usd:g} $"
+
+
+def balance_topup_text(balance: int, required: int, lang: str = "ru") -> str:
+    missing = max(required - balance, 0)
+    if lang == "en":
+        return (
+            f"{ce('news_money')} <b>Not enough balance</b>\n\n"
+            f"Your balance: <b>{balance} ₽</b>\n"
+            f"Required: <b>{required} ₽</b>\n"
+            f"Missing: <b>{missing} ₽</b>\n\n"
+            f"Choose a top-up method:"
+        )
+
+    return (
+        f"{ce('news_money')} <b>Недостаточно средств на балансе</b>\n\n"
+        f"Ваш баланс: <b>{balance} ₽</b>\n"
+        f"Нужно: <b>{required} ₽</b>\n"
+        f"Не хватает: <b>{missing} ₽</b>\n\n"
+        f"Выберите способ пополнения:"
+    )
 
 
 class OrderState(StatesGroup):
@@ -574,6 +595,21 @@ async def stock(message: Message) -> None:
     await message.answer(f"Сейчас в наличии ссылок: <b>{await count_available_links()}</b>")
 
 
+@router.message(Command("stats"))
+async def stats(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    data = await admin_stats()
+    await message.answer(
+        f"{ce('chart')} <b>Статистика бота</b>\n\n"
+        f"Пользователей: <b>{data['users']}</b>\n"
+        f"Заказов: <b>{data['orders']}</b>\n"
+        f"Ссылок в наличии: <b>{data['links']}</b>"
+    )
+
+
 @router.message(Command("addlinks"))
 async def add_links_command(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id):
@@ -1022,6 +1058,21 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
         await callback.answer()
         return
 
+    user = await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
+    product = await get_product_config(PRODUCT_CODE)
+    total = int(product["price_rub"]) * quantity
+    balance = int(user["balance"])
+    if balance < total:
+        missing = total - balance
+        await state.set_state(TopUpState.waiting_for_amount)
+        await state.update_data(topup_amount=missing)
+        await callback.message.answer(
+            balance_topup_text(balance, total, lang),
+            reply_markup=topup_payment_keyboard(missing, lang),
+        )
+        await callback.answer()
+        return
+
     await state.update_data(bulk_payment_method=method)
     await state.set_state(BulkOrderState.waiting_for_contact)
     text = (
@@ -1073,7 +1124,7 @@ async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) ->
     order_title = f"{product['title']} ×{quantity}"
     status = "Ожидает обработки" if stock >= quantity else "Резерв, нет в наличии"
 
-    order = await create_order(
+    order = await create_balance_order(
         user_id=message.from_user.id,
         username=username,
         product_code=PRODUCT_CODE,
@@ -1082,6 +1133,17 @@ async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) ->
         contact=contact,
         status=status,
     )
+    if not order:
+        user = await get_user(message.from_user.id)
+        balance = int(user["balance"]) if user else 0
+        missing = max(total - balance, 1)
+        await state.set_state(TopUpState.waiting_for_amount)
+        await state.update_data(topup_amount=missing)
+        await message.answer(
+            balance_topup_text(balance, total, lang),
+            reply_markup=topup_payment_keyboard(missing, lang),
+        )
+        return
 
     admin_message = (
         f"{ce('cart')} <b>Новый заказ на несколько товаров</b>\n\n"
@@ -1125,6 +1187,21 @@ async def cancel_bulk_order(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "order:start")
 async def start_order(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
+    user = await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
+    product = await get_product_config(PRODUCT_CODE)
+    price = int(product["price_rub"])
+    balance = int(user["balance"])
+    if balance < price:
+        missing = price - balance
+        await state.set_state(TopUpState.waiting_for_amount)
+        await state.update_data(topup_amount=missing)
+        await callback.message.answer(
+            balance_topup_text(balance, price, lang),
+            reply_markup=topup_payment_keyboard(missing, lang),
+        )
+        await callback.answer()
+        return
+
     await state.set_state(OrderState.waiting_for_contact)
     text = (
         f"{ce('support')} Send your Telegram username in this format: <b>@username</b>"
@@ -1154,21 +1231,33 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
     username = f"@{message.from_user.username}" if message.from_user.username else "username не указан"
     status = "Ожидает обработки" if stock else "Резерв, нет в наличии"
 
-    order = await create_order(
+    price = int(product["price_rub"])
+    order = await create_balance_order(
         user_id=message.from_user.id,
         username=username,
         product_code=PRODUCT_CODE,
         product_title=product["title"],
-        price_rub=int(product["price_rub"]),
+        price_rub=price,
         contact=contact,
         status=status,
     )
+    if not order:
+        user = await get_user(message.from_user.id)
+        balance = int(user["balance"]) if user else 0
+        missing = max(price - balance, 1)
+        await state.set_state(TopUpState.waiting_for_amount)
+        await state.update_data(topup_amount=missing)
+        await message.answer(
+            balance_topup_text(balance, price, lang),
+            reply_markup=topup_payment_keyboard(missing, lang),
+        )
+        return
 
     admin_message = (
         f"{ce('cart')} <b>Новый заказ</b>\n\n"
         f"Заказ: #{order['id']}\n"
         f"Товар: {product['title']}\n"
-        f"Цена: {int(product['price_rub'])} ₽\n"
+        f"Цена: {price} ₽\n"
         f"Наличие ссылок: {stock}\n"
         f"Покупатель: {username}\n"
         f"ID: <code>{message.from_user.id}</code>\n"

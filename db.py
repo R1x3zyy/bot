@@ -181,6 +181,46 @@ async def create_order(
         ).fetchone()
 
 
+async def create_balance_order(
+    user_id: int,
+    username: str,
+    product_code: str,
+    product_title: str,
+    price_rub: int,
+    contact: str,
+    status: str,
+) -> dict | None:
+    with get_conn() as conn:
+        charged_user = conn.execute(
+            """
+            UPDATE users
+            SET balance = balance - %s
+            WHERE id = %s AND balance >= %s
+            RETURNING balance
+            """,
+            (price_rub, user_id, price_rub),
+        ).fetchone()
+        if not charged_user:
+            return None
+
+        order = conn.execute(
+            """
+            INSERT INTO orders (user_id, username, product_code, product_title, price_rub, contact, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (user_id, username, product_code, product_title, price_rub, contact, status),
+        ).fetchone()
+        conn.execute(
+            """
+            INSERT INTO transactions (user_id, type, amount, description)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (user_id, "purchase", -price_rub, f"Balance payment: {product_title}"),
+        )
+        return order
+
+
 async def update_order_status(order_id: int, status: str) -> dict | None:
     with get_conn() as conn:
         return conn.execute(
