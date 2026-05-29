@@ -40,7 +40,7 @@ ADMIN_ID = os.getenv("ADMIN_ID")
 PRODUCT_CODE = "gemini_link_18_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 CE = {
-    "gemini": ("5460917519474779991", "💎"),
+    "gemini": ("5332814802702056788", "✦"),
     "planet": ("5454102570312166471", "🪐"),
     "link": ("5454068128969417666", "🔗"),
     "stock": ("5348149223223211884", "📦"),
@@ -188,7 +188,7 @@ async def home_text(lang: str = "ru") -> str:
     if lang == "en":
         return (
             f"{ce('spark')} <b>Welcome to the store!</b>\n\n"
-            f"{ce('cart')} <b>Available product:</b>\n"
+            f"{ce('gemini')} <b>Available product:</b>\n"
             "<blockquote>"
             f"{ce('gemini')} {product['title']}\n"
             f"{ce('link')} Activation via personal link"
@@ -206,7 +206,7 @@ async def home_text(lang: str = "ru") -> str:
 
     return (
         f"{ce('spark')} <b>Добро пожаловать в магазин!</b>\n\n"
-        f"{ce('cart')} <b>В нашем магазине вы можете приобрести:</b>\n"
+        f"{ce('gemini')} <b>В нашем магазине вы можете приобрести:</b>\n"
         "<blockquote>"
         f"{ce('gemini')} {product['title']}\n"
         f"{ce('link')} Активация по персональной ссылке"
