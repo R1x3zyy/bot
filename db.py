@@ -188,6 +188,56 @@ async def count_available_links() -> int:
         return conn.execute("SELECT count(*) AS count FROM links WHERE is_issued = FALSE").fetchone()["count"]
 
 
+async def issue_links_to_order(order_id: int, user_id: int, quantity: int, status: str = "Выдан") -> list[dict] | None:
+    with get_conn() as conn:
+        order = conn.execute(
+            "SELECT issued_link_id FROM orders WHERE id = %s FOR UPDATE",
+            (order_id,),
+        ).fetchone()
+        if not order or order["issued_link_id"]:
+            return None
+
+        links = conn.execute(
+            """
+            SELECT id, url
+            FROM links
+            WHERE is_issued = FALSE
+            ORDER BY id
+            LIMIT %s
+            FOR UPDATE SKIP LOCKED
+            """,
+            (quantity,),
+        ).fetchall()
+        if len(links) < quantity:
+            conn.execute(
+                "UPDATE orders SET status = %s WHERE id = %s",
+                ("Резерв, нет в наличии", order_id),
+            )
+            return []
+
+        link_ids = [link["id"] for link in links]
+        conn.execute(
+            """
+            UPDATE links
+            SET is_issued = TRUE,
+                issued_to = %s,
+                issued_at = now()
+            WHERE id = ANY(%s::bigint[])
+            """,
+            (user_id, link_ids),
+        )
+        conn.execute(
+            """
+            UPDATE orders
+            SET issued_link_id = %s,
+                status = %s
+            WHERE id = %s
+            """,
+            (link_ids[0], status, order_id),
+        )
+        return links
+
+
 async def create_order(
     user_id: int,
     username: str,

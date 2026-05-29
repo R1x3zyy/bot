@@ -34,6 +34,7 @@ from db import (
     get_transactions,
     get_user,
     get_user_orders,
+    issue_links_to_order,
     update_user_language,
 )
 
@@ -672,6 +673,43 @@ async def send_cryptobot_invoice(
         "Оплатите счет, затем нажмите <b>Проверить оплату</b>."
     )
     await message.answer(text, reply_markup=cryptobot_invoice_keyboard(payment["id"], invoice_url, lang))
+
+
+def delivery_text(links: list[dict], lang: str = "ru") -> str:
+    if len(links) == 1:
+        return (
+            f"{ce('ok')} <b>Your link</b>\n\n{links[0]['url']}"
+            if lang == "en"
+            else f"{ce('ok')} <b>Ваша ссылка</b>\n\n{links[0]['url']}"
+        )
+
+    lines = [f"{index}. {link['url']}" for index, link in enumerate(links, start=1)]
+    return (
+        f"{ce('ok')} <b>Your links</b>\n\n" + "\n".join(lines)
+        if lang == "en"
+        else f"{ce('ok')} <b>Ваши ссылки</b>\n\n" + "\n".join(lines)
+    )
+
+
+def reserved_text(lang: str = "ru") -> str:
+    return (
+        f"{ce('stock')} The order is paid, but there are not enough links in stock. "
+        "It is reserved and will be delivered after restock."
+        if lang == "en"
+        else f"{ce('stock')} Заказ оплачен, но сейчас не хватает ссылок в наличии. "
+        "Он зарезервирован и будет выдан после пополнения."
+    )
+
+
+async def deliver_order_links(message: Message, order_id: int, user_id: int, quantity: int, lang: str) -> list[dict]:
+    links = await issue_links_to_order(order_id, user_id, quantity, "Выдан автоматически")
+    if links is None:
+        return []
+    if links:
+        await message.answer(delivery_text(links, lang))
+    else:
+        await message.answer(reserved_text(lang))
+    return links
 
 
 @router.message(CommandStart())
@@ -1358,11 +1396,18 @@ async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) ->
             logging.exception("Could not send bulk order to admin")
 
     await state.clear()
+    issued_links = await deliver_order_links(message, order["id"], message.from_user.id, quantity, lang)
     done_text = (
         f"{ce('ok')} Order for <b>{quantity}</b> items created. It is now visible in My purchases."
         if lang == "en"
         else f"{ce('ok')} Заказ на <b>{quantity}</b> шт. оформлен. Он появился в разделе «Мои покупки»."
     )
+    if issued_links:
+        done_text = (
+            f"{ce('ok')} Order created and delivered. It is visible in My purchases."
+            if lang == "en"
+            else f"{ce('ok')} Заказ оформлен и выдан. Он появился в разделе «Мои покупки»."
+        )
     await message.answer(done_text, reply_markup=start_keyboard(lang))
 
 
@@ -1429,6 +1474,25 @@ async def check_cryptobot_payment(callback: CallbackQuery, bot: Bot) -> None:
         return
 
     if payment["status"] == "paid":
+        if payment["purpose"] != "topup" and payment["order_id"]:
+            quantity = int(payment["quantity"] or 1)
+            issued_links = await deliver_order_links(
+                callback.message,
+                int(payment["order_id"]),
+                callback.from_user.id,
+                quantity,
+                lang,
+            )
+            if issued_links:
+                text = (
+                    f"{ce('ok')} This payment was already credited. Links delivered now."
+                    if lang == "en"
+                    else f"{ce('ok')} Этот платеж уже был зачислен. Ссылки выданы сейчас."
+                )
+                await callback.message.answer(text, reply_markup=start_keyboard(lang))
+                await callback.answer()
+                return
+
         text = (
             f"{ce('ok')} This payment has already been credited."
             if lang == "en"
@@ -1466,15 +1530,32 @@ async def check_cryptobot_payment(callback: CallbackQuery, bot: Bot) -> None:
             else f"{ce('ok')} Баланс пополнен на <b>{int(completed['amount_rub'])} ₽</b>."
         )
     else:
+        quantity = int(completed["quantity"] or 1)
+        issued_links = []
+        if completed["order_id"]:
+            issued_links = await deliver_order_links(
+                callback.message,
+                int(completed["order_id"]),
+                callback.from_user.id,
+                quantity,
+                lang,
+            )
         text = (
             f"{ce('ok')} Payment received. Order created and is visible in My purchases."
             if lang == "en"
             else f"{ce('ok')} Оплата получена. Заказ создан и появился в разделе «Мои покупки»."
         )
+        if issued_links:
+            text = (
+                f"{ce('ok')} Payment received. Order created and delivered."
+                if lang == "en"
+                else f"{ce('ok')} Оплата получена. Заказ создан и выдан."
+            )
         if ADMIN_ID:
             admin_message = (
                 f"{ce('cart')} <b>Новый заказ Crypto Bot</b>\n\n"
                 f"Товар: {completed['product_title']}\n"
+                f"Выдано ссылок: {len(issued_links)}\n"
                 f"Сумма: {int(completed['amount_rub'])} ₽\n"
                 f"Оплата: Crypto Bot\n"
                 f"Покупатель: {username}\n"
@@ -1581,11 +1662,18 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
             logging.exception("Could not send order to admin")
 
     await state.clear()
+    issued_links = await deliver_order_links(message, order["id"], message.from_user.id, 1, lang)
     done_text = (
         f"{ce('ok')} Order created. It is now visible in My purchases. The administrator will contact you."
         if lang == "en"
         else f"{ce('ok')} Заказ оформлен. Он появился в разделе «Мои покупки». Администратор свяжется с вами."
     )
+    if issued_links:
+        done_text = (
+            f"{ce('ok')} Order created and delivered. It is now visible in My purchases."
+            if lang == "en"
+            else f"{ce('ok')} Заказ оформлен и выдан. Он появился в разделе «Мои покупки»."
+        )
     await message.answer(done_text, reply_markup=start_keyboard(lang))
 
 
