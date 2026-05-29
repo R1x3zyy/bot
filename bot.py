@@ -101,23 +101,12 @@ def main_menu(lang: str = "ru") -> ReplyKeyboardMarkup:
 
 
 def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
-    if lang == "en":
-        buttons = [
-            [InlineKeyboardButton(text="Catalog", callback_data="catalog:open")],
-            [InlineKeyboardButton(text="Profile", callback_data="profile:open")],
-            [InlineKeyboardButton(text="💬 Support", callback_data="support:open")],
-            [InlineKeyboardButton(text="❓ Help", callback_data="help:open")],
-        ]
-    else:
-        buttons = [
-            [InlineKeyboardButton(text="Каталог", callback_data="catalog:open")],
-            [InlineKeyboardButton(text="Профиль", callback_data="profile:open")],
-            [InlineKeyboardButton(text="💬 Поддержка", callback_data="support:open")],
-            [InlineKeyboardButton(text="❓ Справка", callback_data="help:open")],
-        ]
+    help_text = "❓ Help" if lang == "en" else "❓ Справка"
 
     return InlineKeyboardMarkup(
-        inline_keyboard=buttons
+        inline_keyboard=[
+            [InlineKeyboardButton(text=help_text, callback_data="help:open")],
+        ]
     )
 
 
