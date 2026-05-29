@@ -775,13 +775,14 @@ async def send_cryptobot_invoice(
 
 def delivery_text(links: list[dict], lang: str = "ru") -> str:
     if len(links) == 1:
+        url = html.escape(str(links[0]["url"]))
         return (
-            f"{ce('ok')} <b>Your link</b>\n\n{links[0]['url']}"
+            f"{ce('ok')} <b>Your link</b>\n\n<code>{url}</code>"
             if lang == "en"
-            else f"{ce('ok')} <b>Ваша ссылка</b>\n\n{links[0]['url']}"
+            else f"{ce('ok')} <b>Ваша ссылка</b>\n\n<code>{url}</code>"
         )
 
-    lines = [f"{index}. {link['url']}" for index, link in enumerate(links, start=1)]
+    lines = [f"{index}. <code>{html.escape(str(link['url']))}</code>" for index, link in enumerate(links, start=1)]
     return (
         f"{ce('ok')} <b>Your links</b>\n\n" + "\n".join(lines)
         if lang == "en"
