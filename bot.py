@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -39,6 +40,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 PRODUCT_CODE = "gemini_link_18_month"
 SUPPORT_USERNAME = "@R1x3zyy"
+TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
 CE = {
     "gemini": ("5321197740800120767", "🤖"),
     "shop": ("5309801015015405183", "🎁"),
@@ -560,9 +562,9 @@ async def start_order(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
     await state.set_state(OrderState.waiting_for_contact)
     text = (
-        f"{ce('support')} Send your contact in one message: username, phone number or another convenient contact method."
+        f"{ce('support')} Send your Telegram username in this format: <b>@username</b>"
         if lang == "en"
-        else f"{ce('support')} Отправьте контакт для связи одним сообщением: username, номер телефона или другой удобный способ."
+        else f"{ce('support')} Напишите ваш Telegram юзернейм в таком формате: <b>@username</b>"
     )
     await callback.message.answer(text)
     await callback.answer()
@@ -574,7 +576,16 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
     lang = await get_lang(message.from_user.id)
     product = await get_product_config(PRODUCT_CODE)
     stock = await count_available_links()
-    contact = message.text or "Пользователь отправил сообщение без текста."
+    contact = (message.text or "").strip()
+    if not TELEGRAM_USERNAME_RE.fullmatch(contact):
+        error_text = (
+            f"{ce('support')} Please send only your Telegram username in this format: <b>@username</b>"
+            if lang == "en"
+            else f"{ce('support')} Пожалуйста, отправьте только ваш Telegram юзернейм в формате: <b>@username</b>"
+        )
+        await message.answer(error_text)
+        return
+
     username = f"@{message.from_user.username}" if message.from_user.username else "username не указан"
     status = "Ожидает обработки" if stock else "Резерв, нет в наличии"
 
