@@ -87,10 +87,10 @@ async def get_lang(user_id: int) -> str:
 
 def main_menu(lang: str = "ru") -> ReplyKeyboardMarkup:
     if lang == "en":
-        keyboard = [["Catalog", "Profile"], ["Support"]]
+        keyboard = [["Catalog", "Profile"], ["Support", "Help"]]
         placeholder = "Choose a section"
     else:
-        keyboard = [["Каталог", "Профиль"], ["Поддержка"]]
+        keyboard = [["Каталог", "Профиль"], ["Поддержка", "❓ Справка"]]
         placeholder = "Выберите раздел"
 
     return ReplyKeyboardMarkup(
@@ -130,6 +130,16 @@ def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=order_text, callback_data="order:start")],
             [InlineKeyboardButton(text=back_text, callback_data="catalog:open")],
+        ]
+    )
+
+
+def help_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
+    home_text = "🏠 Home" if lang == "en" else "🏠 На главную"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/R1x3zyy")],
+            [InlineKeyboardButton(text=home_text, callback_data="menu:home")],
         ]
     )
 
@@ -272,6 +282,25 @@ async def product_text(lang: str = "ru") -> str:
         f"{ce('stock')} <b>Количество:</b> {stock}\n"
         f"{ce('bolt')} <b>Выдача:</b> после подтверждения заказа.\n\n"
         "Если ссылки временно закончились, заказ можно зарезервировать и обработать после пополнения наличия."
+    )
+
+
+def help_text(lang: str = "ru") -> str:
+    if lang == "en":
+        return (
+            f"{ce('support')} <b>Help</b>\n\n"
+            "Privacy Policy:\n"
+            "https://telegra.ph/Politika-konfidencialnosti-04-01-26\n\n"
+            "User Agreement:\n"
+            "https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19"
+        )
+
+    return (
+        f"{ce('support')} <b>Справка</b>\n\n"
+        "Политика конфиденциальности:\n"
+        "https://telegra.ph/Politika-konfidencialnosti-04-01-26\n\n"
+        "Пользовательское соглашение:\n"
+        "https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19"
     )
 
 
@@ -435,7 +464,13 @@ async def show_profile(message: Message) -> None:
 @router.message(F.text.casefold().in_({"поддержка", "support"}))
 async def show_support(message: Message) -> None:
     lang = await get_lang(message.from_user.id)
-    await message.answer(support_text(lang), reply_markup=main_menu(lang))
+    await message.answer(support_text(lang), reply_markup=help_keyboard(lang))
+
+
+@router.message(F.text.casefold().in_({"❓ справка", "справка", "help"}))
+async def show_help(message: Message) -> None:
+    lang = await get_lang(message.from_user.id)
+    await message.answer(help_text(lang), reply_markup=help_keyboard(lang))
 
 
 @router.callback_query(F.data == "menu:home")
