@@ -66,6 +66,10 @@ class OrderState(StatesGroup):
     waiting_for_contact = State()
 
 
+class AdminState(StatesGroup):
+    waiting_for_links = State()
+
+
 router = Router()
 
 
@@ -361,7 +365,7 @@ async def stock(message: Message) -> None:
 
 
 @router.message(Command("addlinks"))
-async def add_links_command(message: Message) -> None:
+async def add_links_command(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id):
         await message.answer("Добавлять ссылки может только администратор. Узнать ID: /myid")
         return
@@ -369,15 +373,44 @@ async def add_links_command(message: Message) -> None:
     raw_text = message.text or ""
     links = [line.strip() for line in raw_text.splitlines()[1:] if line.strip()]
     if not links:
+        await state.set_state(AdminState.waiting_for_links)
         await message.answer(
-            "Отправьте ссылки так:\n\n"
+            "Отправьте ссылки следующим сообщением или сразу после команды:\n\n"
             "/addlinks\n"
+            "976 https://example.com/link-1\n"
+            "977 https://example.com/link-2\n\n"
+            "Также подойдет формат без номеров:\n"
             "https://example.com/link-1\n"
             "https://example.com/link-2"
         )
         return
 
     added = await add_links(links)
+    await message.answer(
+        f"Добавлено ссылок: <b>{added}</b>\n"
+        f"Теперь в наличии: <b>{await count_available_links()}</b>"
+    )
+
+
+@router.message(AdminState.waiting_for_links)
+async def add_links_from_next_message(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        await message.answer("Добавлять ссылки может только администратор. Узнать ID: /myid")
+        return
+
+    links = (message.text or "").splitlines()
+    added = await add_links(links)
+    await state.clear()
+
+    if not added:
+        await message.answer(
+            "Я не нашел ссылок в сообщении. Отправьте строки вида:\n\n"
+            "976 https://example.com/link-1\n"
+            "977 https://example.com/link-2"
+        )
+        return
+
     await message.answer(
         f"Добавлено ссылок: <b>{added}</b>\n"
         f"Теперь в наличии: <b>{await count_available_links()}</b>"
