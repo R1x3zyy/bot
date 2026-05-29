@@ -40,7 +40,7 @@ ADMIN_ID = os.getenv("ADMIN_ID")
 PRODUCT_CODE = "gemini_link_18_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 CE = {
-    "gemini": ("5332814802702056788", "✦"),
+    "gemini": ("5332814802702056788", "💎"),
     "planet": ("5454102570312166471", "🪐"),
     "link": ("5454068128969417666", "🔗"),
     "stock": ("5348149223223211884", "📦"),
@@ -250,7 +250,7 @@ async def product_text(lang: str = "ru") -> str:
 
     if lang == "en":
         return (
-            f"<b>{ce('gemini')} {product['title']}</b>\n\n"
+            f"{ce('gemini')} <b>{product['title']}</b>\n\n"
             f"{product['description']}\n\n"
             f"{ce('card')} <b>Price:</b> {price_rub} ₽ / {price_usd:g} $\n"
             f"{ce('stock')} <b>Stock:</b> {stock}\n"
@@ -259,7 +259,7 @@ async def product_text(lang: str = "ru") -> str:
         )
 
     return (
-        f"<b>{ce('gemini')} {product['title']}</b>\n\n"
+        f"{ce('gemini')} <b>{product['title']}</b>\n\n"
         f"{product['description']}\n\n"
         f"{ce('card')} <b>Цена:</b> {price_rub} ₽ / {price_usd:g} $\n"
         f"{ce('stock')} <b>Количество:</b> {stock}\n"
@@ -276,7 +276,7 @@ async def profile_text(user_id: int, lang: str = "ru") -> str:
 
     if lang == "en":
         return (
-            f"<b>{ce('gemini')} Profile</b>\n\n"
+            f"{ce('gemini')} <b>Profile</b>\n\n"
             f"ID: <code>{user_id}</code>\n"
             f"{ce('card')} Balance: <b>{balance} ₽</b>\n"
             f"Orders: <b>{len(orders)}</b>\n"
@@ -284,7 +284,7 @@ async def profile_text(user_id: int, lang: str = "ru") -> str:
         )
 
     return (
-        f"<b>{ce('gemini')} Профиль</b>\n\n"
+        f"{ce('gemini')} <b>Профиль</b>\n\n"
         f"ID: <code>{user_id}</code>\n"
         f"{ce('card')} Баланс: <b>{balance} ₽</b>\n"
         f"Покупок оформлено: <b>{len(orders)}</b>\n"
@@ -555,7 +555,7 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
     )
 
     admin_message = (
-        f"<b>{ce('cart')} Новый заказ</b>\n\n"
+        f"{ce('cart')} <b>Новый заказ</b>\n\n"
         f"Заказ: #{order['id']}\n"
         f"Товар: {product['title']}\n"
         f"Цена: {int(product['price_rub'])} ₽\n"
