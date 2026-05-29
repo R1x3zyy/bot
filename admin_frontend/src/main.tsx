@@ -65,6 +65,16 @@ type Product = {
 
 type Tab = 'orders' | 'links' | 'product' | 'users';
 
+const ORDER_STATUSES = [
+  'Ожидает обработки',
+  'Оплачен',
+  'Оплачен Crypto Bot, ожидает обработки',
+  'Выдан',
+  'Выдан автоматически',
+  'Резерв, нет в наличии',
+  'Отменен',
+];
+
 function authHeader(login: string, password: string) {
   return `Basic ${btoa(`${login}:${password}`)}`;
 }
@@ -340,11 +350,10 @@ function App() {
                         value={order.status}
                         onChange={(event) => updateStatus(order.id, event.target.value)}
                       >
-                        <option>Ожидает обработки</option>
-                        <option>Оплачен</option>
-                        <option>Выдан</option>
-                        <option>Резерв, нет в наличии</option>
-                        <option>Отменен</option>
+                        {!ORDER_STATUSES.includes(order.status) && <option>{order.status}</option>}
+                        {ORDER_STATUSES.map((status) => (
+                          <option key={status}>{status}</option>
+                        ))}
                       </select>
                     </td>
                     <td>{formatDate(order.created_at)}</td>
