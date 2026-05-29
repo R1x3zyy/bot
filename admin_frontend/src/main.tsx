@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Save,
   Settings,
+  Trash2,
   Users,
 } from 'lucide-react';
 import './styles.css';
@@ -180,6 +181,24 @@ function App() {
     await loadAll();
   }
 
+  async function deleteLink(linkId: number) {
+    if (!window.confirm('Удалить эту ссылку?')) return;
+    await request<{ deleted: number }>(`/api/links/${linkId}`, {
+      method: 'DELETE',
+    });
+    setMessage('Ссылка удалена');
+    await loadAll();
+  }
+
+  async function clearAvailableLinks() {
+    if (!window.confirm('Удалить все ссылки, которые еще не выданы?')) return;
+    const result = await request<{ deleted: number }>('/api/links/available', {
+      method: 'DELETE',
+    });
+    setMessage(`Удалено невыданных ссылок: ${result.deleted}`);
+    await loadAll();
+  }
+
   function logout() {
     localStorage.removeItem('admin_password');
     setPassword('');
@@ -334,12 +353,27 @@ function App() {
             </button>
           </form>
           <section className="panel">
-            <h2>Последние ссылки</h2>
+            <div className="panel-heading">
+              <h2>Последние ссылки</h2>
+              <button className="danger" type="button" onClick={clearAvailableLinks}>
+                <Trash2 size={18} />
+                Очистить невыданные
+              </button>
+            </div>
             <div className="link-list">
               {links.map((link) => (
                 <div className="link-row" key={link.id}>
                   <span>{link.url}</span>
                   <strong>{link.is_issued ? 'Выдана' : 'В наличии'}</strong>
+                  <button
+                    className="danger icon-button"
+                    type="button"
+                    aria-label="Удалить ссылку"
+                    title="Удалить ссылку"
+                    onClick={() => deleteLink(link.id)}
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               ))}
             </div>

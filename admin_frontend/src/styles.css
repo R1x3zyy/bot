@@ -46,6 +46,17 @@ button:disabled {
   width: 42px;
 }
 
+.danger {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.icon-button {
+  justify-content: center;
+  padding: 0;
+  width: 40px;
+}
+
 input,
 textarea,
 select {
@@ -202,6 +213,18 @@ label {
   margin: 0 0 14px;
 }
 
+.panel-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panel-heading h2 {
+  margin: 0;
+}
+
 .split {
   display: grid;
   gap: 16px;
@@ -252,7 +275,7 @@ td small {
   border-radius: 6px;
   display: grid;
   gap: 12px;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   padding: 10px;
 }
 
@@ -285,6 +308,7 @@ td small {
 
 @media (max-width: 780px) {
   .topbar,
+  .panel-heading,
   .tabs,
   .split,
   .form-row,

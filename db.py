@@ -172,6 +172,17 @@ async def list_links(limit: int = 100) -> list[dict]:
         ).fetchall()
 
 
+async def delete_link(link_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute("DELETE FROM links WHERE id = %s RETURNING *", (link_id,)).fetchone()
+
+
+async def delete_available_links() -> int:
+    with get_conn() as conn:
+        rows = conn.execute("DELETE FROM links WHERE is_issued = FALSE RETURNING id").fetchall()
+        return len(rows)
+
+
 async def count_available_links() -> int:
     with get_conn() as conn:
         return conn.execute("SELECT count(*) AS count FROM links WHERE is_issued = FALSE").fetchone()["count"]

@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from db import (
     add_links,
     admin_stats,
+    delete_available_links,
+    delete_link,
     ensure_schema,
     get_product_config,
     list_links,
@@ -122,6 +124,20 @@ async def links(_: str = Depends(check_auth)) -> list[dict]:
 async def create_links(payload: LinksPayload, _: str = Depends(check_auth)) -> dict:
     added = await add_links(payload.links.splitlines())
     return {"added": added}
+
+
+@app.delete("/api/links/available")
+async def remove_available_links(_: str = Depends(check_auth)) -> dict:
+    deleted = await delete_available_links()
+    return {"deleted": deleted}
+
+
+@app.delete("/api/links/{link_id}")
+async def remove_link(link_id: int, _: str = Depends(check_auth)) -> dict:
+    deleted = await delete_link(link_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Link not found")
+    return {"deleted": 1}
 
 
 @app.get("/api/product")
