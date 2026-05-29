@@ -138,7 +138,8 @@ async def add_links(links: list[str]) -> int:
         return 0
 
     with get_conn() as conn:
-        conn.executemany("INSERT INTO links (url) VALUES (%s)", [(link,) for link in clean_links])
+        with conn.cursor() as cur:
+            cur.executemany("INSERT INTO links (url) VALUES (%s)", [(link,) for link in clean_links])
     return len(clean_links)
 
 
