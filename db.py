@@ -1,4 +1,5 @@
 import os
+import re
 from contextlib import contextmanager
 from decimal import Decimal
 
@@ -11,6 +12,7 @@ load_dotenv()
 
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/gemini_store")
+URL_RE = re.compile(r"https?://\S+")
 
 
 @contextmanager
@@ -126,7 +128,12 @@ async def update_user_language(user_id: int, language: str) -> dict | None:
 
 
 async def add_links(links: list[str]) -> int:
-    clean_links = [link.strip() for link in links if link.strip()]
+    clean_links = []
+    for line in links:
+        match = URL_RE.search(line.strip())
+        if match:
+            clean_links.append(match.group(0))
+
     if not clean_links:
         return 0
 
