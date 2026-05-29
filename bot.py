@@ -65,6 +65,7 @@ CE = {
     "news_shield": ("5251203410396458957", "🛡"),
     "news_gear": ("5341715473882955310", "⚙️"),
     "news_pencil": ("5395444784611480792", "✏️"),
+    "news_info": ("5334544901428229844", "ℹ️"),
 }
 
 
@@ -277,6 +278,7 @@ async def home_text(lang: str = "ru") -> str:
             f"{ce('support')} Support: {SUPPORT_USERNAME}"
             "</blockquote>\n\n"
             f"{ce('stock')} <b>In stock:</b> {stock}\n\n"
+            f"{ce('news_catalog')} Catalog  {ce('news_info')} Profile  {ce('news_gear')} Other\n"
             "Choose an action below:"
         )
 
@@ -295,6 +297,7 @@ async def home_text(lang: str = "ru") -> str:
         f"{ce('support')} Поддержка: {SUPPORT_USERNAME}"
         "</blockquote>\n\n"
         f"{ce('stock')} <b>Сейчас в наличии:</b> {stock}\n\n"
+        f"{ce('news_catalog')} Каталог  {ce('news_info')} Профиль  {ce('news_gear')} Прочее\n"
         "Выберите действие ниже:"
     )
 
