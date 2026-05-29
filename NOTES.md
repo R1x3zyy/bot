@@ -19,3 +19,4 @@
 - `admin.py` теперь FastAPI JSON API для React-админки.
 - Конфигурация товара хранится в таблице `product_settings` и редактируется из админки.
 - Добавлены `DEPLOYMENT.md` и `Dockerfile`.
+- Добавлен CI/CD: GitHub Actions, GitLab CI и `scripts/deploy.sh`.

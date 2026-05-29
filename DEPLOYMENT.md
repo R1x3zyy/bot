@@ -158,3 +158,70 @@ python bot.py
 ```
 
 После этого пользователь пишет боту `/start`, а данные пользователей, заказов, ссылок и профиля сохраняются в PostgreSQL.
+
+## 6. CI/CD
+
+В репозитории есть готовый deploy-скрипт:
+
+```text
+scripts/deploy.sh
+```
+
+Он делает:
+
+- `git reset --hard origin/main`;
+- установку Python-зависимостей;
+- проверку Python-файлов;
+- `npm install`;
+- сборку React-админки;
+- перезапуск `gemini-api`, `gemini-bot` и nginx.
+
+### GitHub Actions
+
+Файл:
+
+```text
+.github/workflows/deploy.yml
+```
+
+В GitHub открой:
+
+```text
+Settings -> Secrets and variables -> Actions -> New repository secret
+```
+
+Добавь:
+
+```env
+SERVER_HOST=194.154.27.196
+SERVER_USER=root
+SERVER_PASSWORD=пароль_сервера
+SERVER_PORT=22
+```
+
+После этого каждый push в `main` будет запускать деплой.
+
+### GitLab CI
+
+Файл:
+
+```text
+.gitlab-ci.yml
+```
+
+В GitLab открой:
+
+```text
+Settings -> CI/CD -> Variables
+```
+
+Добавь:
+
+```env
+SERVER_HOST=194.154.27.196
+SERVER_USER=root
+SERVER_PASSWORD=пароль_сервера
+SERVER_PORT=22
+```
+
+После push в `main` GitLab запустит deploy job.
