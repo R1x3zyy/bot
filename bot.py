@@ -65,6 +65,12 @@ def ce(name: str) -> str:
     return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
 
+def format_price(product: dict) -> str:
+    price_rub = int(product["price_rub"])
+    price_usd = float(product["price_usd"])
+    return f"{price_rub} ₽ / {price_usd:g} $"
+
+
 class OrderState(StatesGroup):
     waiting_for_contact = State()
 
@@ -114,13 +120,14 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     product = await get_product_config(PRODUCT_CODE)
     stock = await count_available_links()
+    price = format_price(product)
     back = "⬅️ Back" if lang == "en" else "⬅️ Назад"
     item_suffix = "pcs" if lang == "en" else "шт."
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"🤖 {product['title']} | {stock} {item_suffix}",
+                    text=f"🤖 {product['title']} | {price} | {stock} {item_suffix}",
                     callback_data=f"product:{PRODUCT_CODE}",
                 )
             ],
@@ -212,13 +219,14 @@ def language_keyboard() -> InlineKeyboardMarkup:
 async def home_text(lang: str = "ru") -> str:
     product = await get_product_config(PRODUCT_CODE)
     stock = await count_available_links()
+    price = format_price(product)
 
     if lang == "en":
         return (
             f"{ce('spark')} <b>Welcome to the store!</b>\n\n"
             f"{ce('gemini')} <b>Available product:</b>\n"
             "<blockquote>"
-            f"{ce('gemini')} {product['title']}\n"
+            f"{ce('gemini')} {product['title']} | {price}\n"
             f"{ce('link')} Activation via personal link"
             "</blockquote>\n\n"
             f"{ce('fire')} <b>Why choose us:</b>\n"
@@ -236,7 +244,7 @@ async def home_text(lang: str = "ru") -> str:
         f"{ce('spark')} <b>Добро пожаловать в магазин!</b>\n\n"
         f"{ce('shop')} <b>В нашем магазине вы можете приобрести:</b>\n"
         "<blockquote>"
-        f"{ce('gemini')} {product['title']}\n"
+        f"{ce('gemini')} {product['title']} | {price}\n"
         f"{ce('link')} Активация по персональной ссылке"
         "</blockquote>\n\n"
         f"{ce('fire')} <b>Наши преимущества:</b>\n"
@@ -273,14 +281,13 @@ def support_text(lang: str = "ru") -> str:
 async def product_text(lang: str = "ru") -> str:
     product = await get_product_config(PRODUCT_CODE)
     stock = await count_available_links()
-    price_rub = int(product["price_rub"])
-    price_usd = float(product["price_usd"])
+    price = format_price(product)
 
     if lang == "en":
         return (
             f"{ce('gemini')} <b>{product['title']}</b>\n\n"
             f"{product['description']}\n\n"
-            f"{ce('card')} <b>Price:</b> {price_rub} ₽ / {price_usd:g} $\n"
+            f"{ce('card')} <b>Price:</b> {price}\n"
             f"{ce('stock')} <b>Stock:</b> {stock}\n"
             f"{ce('bolt')} <b>Delivery:</b> after order confirmation.\n\n"
             "If links are temporarily out of stock, your order can be reserved and processed after restock."
@@ -289,7 +296,7 @@ async def product_text(lang: str = "ru") -> str:
     return (
         f"{ce('gemini')} <b>{product['title']}</b>\n\n"
         f"{product['description']}\n\n"
-        f"{ce('card')} <b>Цена:</b> {price_rub} ₽ / {price_usd:g} $\n"
+        f"{ce('card')} <b>Цена:</b> {price}\n"
         f"{ce('stock')} <b>Количество:</b> {stock}\n"
         f"{ce('bolt')} <b>Выдача:</b> после подтверждения заказа.\n\n"
         "Если ссылки временно закончились, заказ можно зарезервировать и обработать после пополнения наличия."

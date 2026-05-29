@@ -277,11 +277,18 @@ td small {
   grid-template-columns: 1fr 1fr;
 }
 
+.product-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(260px, 1fr) 140px 140px;
+}
+
 @media (max-width: 780px) {
   .topbar,
   .tabs,
   .split,
-  .form-row {
+  .form-row,
+  .product-row {
     display: grid;
     grid-template-columns: 1fr;
   }

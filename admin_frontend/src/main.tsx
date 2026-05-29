@@ -350,18 +350,20 @@ function App() {
       {tab === 'product' && product && (
         <form className="panel product-form" onSubmit={saveProduct}>
           <h2>Настройки товара</h2>
-          <label>
-            Название
-            <input
-              value={product.title}
-              onChange={(event) => setProduct({ ...product, title: event.target.value })}
-            />
-          </label>
-          <div className="form-row">
+          <div className="product-row">
+            <label>
+              Название
+              <input
+                value={product.title}
+                onChange={(event) => setProduct({ ...product, title: event.target.value })}
+              />
+            </label>
             <label>
               Цена ₽
               <input
                 type="number"
+                min="0"
+                step="1"
                 value={product.price_rub}
                 onChange={(event) => setProduct({ ...product, price_rub: Number(event.target.value) })}
               />
@@ -370,6 +372,7 @@ function App() {
               Цена $
               <input
                 type="number"
+                min="0"
                 step="0.01"
                 value={product.price_usd}
                 onChange={(event) => setProduct({ ...product, price_usd: Number(event.target.value) })}
