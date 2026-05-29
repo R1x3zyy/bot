@@ -84,6 +84,11 @@ class OrderState(StatesGroup):
     waiting_for_contact = State()
 
 
+class BulkOrderState(StatesGroup):
+    waiting_for_quantity = State()
+    waiting_for_contact = State()
+
+
 class TopUpState(StatesGroup):
     waiting_for_amount = State()
 
@@ -157,6 +162,7 @@ def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💵 Pay Crypto Bot", callback_data="payment:cryptobot")],
             [InlineKeyboardButton(text="💵 Pay BEP20 USDT", callback_data="payment:bep20")],
             [InlineKeyboardButton(text="💵 Pay with balance", callback_data="order:start")],
+            [InlineKeyboardButton(text="🛒 Buy several", callback_data="bulk:start")],
             [InlineKeyboardButton(text="💵 Top up balance", callback_data="profile:topup")],
             [InlineKeyboardButton(text="← Back", callback_data="catalog:open")],
             [InlineKeyboardButton(text="← Menu", callback_data="menu:home")],
@@ -170,6 +176,7 @@ def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💵 Оплатить Crypto Bot", callback_data="payment:cryptobot")],
             [InlineKeyboardButton(text="💵 Оплатить BEP20 USDT", callback_data="payment:bep20")],
             [InlineKeyboardButton(text="💵 Заплатить балансом", callback_data="order:start")],
+            [InlineKeyboardButton(text="🛒 Купить много", callback_data="bulk:start")],
             [InlineKeyboardButton(text="💵 Пополнить баланс", callback_data="profile:topup")],
             [InlineKeyboardButton(text="← Назад", callback_data="catalog:open")],
             [InlineKeyboardButton(text="← В меню", callback_data="menu:home")],
@@ -194,6 +201,29 @@ def topup_payment_keyboard(amount: int, lang: str = "ru") -> InlineKeyboardMarku
             [InlineKeyboardButton(text=f"Crypto Bot · {amount} ₽", callback_data="topup:method:cryptobot")],
             [InlineKeyboardButton(text=f"BEP20 USDT · {amount} ₽", callback_data="topup:method:bep20")],
             [InlineKeyboardButton(text="Отмена", callback_data="topup:cancel")],
+        ]
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def bulk_payment_keyboard(quantity: int, lang: str = "ru") -> InlineKeyboardMarkup:
+    if lang == "en":
+        buttons = [
+            [InlineKeyboardButton(text=f"Balance ×{quantity}", callback_data="bulk:pay:balance")],
+            [
+                InlineKeyboardButton(text=f"Platega ×{quantity}", callback_data="bulk:pay:platega"),
+                InlineKeyboardButton(text=f"Crypto ×{quantity}", callback_data="bulk:pay:cryptobot"),
+            ],
+            [InlineKeyboardButton(text="Cancel", callback_data="bulk:cancel")],
+        ]
+    else:
+        buttons = [
+            [InlineKeyboardButton(text=f"Баланс ×{quantity}", callback_data="bulk:pay:balance")],
+            [
+                InlineKeyboardButton(text=f"Platega ×{quantity}", callback_data="bulk:pay:platega"),
+                InlineKeyboardButton(text=f"Crypto ×{quantity}", callback_data="bulk:pay:cryptobot"),
+            ],
+            [InlineKeyboardButton(text="Отмена", callback_data="bulk:cancel")],
         ]
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -888,6 +918,207 @@ async def set_language(callback: CallbackQuery) -> None:
     text = f"{ce('ok')} Language changed to English." if lang == "en" else f"{ce('ok')} Язык изменён на русский."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
     await callback.message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "bulk:start")
+async def start_bulk_order(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
+    product = await get_product_config(PRODUCT_CODE)
+    stock = await count_available_links()
+    await state.set_state(BulkOrderState.waiting_for_quantity)
+    text = (
+        f"{ce('cart')} <b>Buying several items</b>\n\n"
+        f"Product: <b>{product['title']}</b>\n"
+        f"Currently available: <b>{stock}</b>\n\n"
+        f"Send a number with how many items you want to buy at once."
+        if lang == "en"
+        else f"{ce('cart')} <b>Покупка нескольких товаров</b>\n\n"
+        f"Товар: <b>{product['title']}</b>\n"
+        f"Сейчас в наличии: <b>{stock}</b>\n\n"
+        f"Отправьте числом, сколько штук купить сразу."
+    )
+    await callback.message.answer(text)
+    await callback.answer()
+
+
+@router.message(BulkOrderState.waiting_for_quantity)
+async def receive_bulk_quantity(message: Message, state: FSMContext) -> None:
+    await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    lang = await get_lang(message.from_user.id)
+    raw_quantity = (message.text or "").strip()
+
+    if not raw_quantity.isdigit():
+        text = (
+            "Send only a whole number, for example: <b>2</b>."
+            if lang == "en"
+            else "Отправьте только целое число, например: <b>2</b>."
+        )
+        await message.answer(text)
+        return
+
+    quantity = int(raw_quantity)
+    stock = await count_available_links()
+    if quantity <= 0:
+        text = "Quantity must be at least 1." if lang == "en" else "Количество должно быть от 1."
+        await message.answer(text)
+        return
+
+    if stock and quantity > stock:
+        text = (
+            f"Only <b>{stock}</b> pcs are available. Send a smaller quantity."
+            if lang == "en"
+            else f"Сейчас в наличии только <b>{stock}</b> шт. Отправьте количество поменьше."
+        )
+        await message.answer(text)
+        return
+
+    await state.update_data(bulk_quantity=quantity)
+    text = "Choose payment method:" if lang == "en" else "Выберите способ оплаты:"
+    await message.answer(text, reply_markup=bulk_payment_keyboard(quantity, lang))
+
+
+@router.callback_query(F.data.startswith("bulk:pay:"))
+async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
+    data = await state.get_data()
+    quantity = int(data.get("bulk_quantity") or 0)
+    method = callback.data.split(":")[-1]
+
+    if quantity <= 0:
+        await state.set_state(BulkOrderState.waiting_for_quantity)
+        text = "Send the quantity again." if lang == "en" else "Отправьте количество еще раз."
+        await callback.message.answer(text)
+        await callback.answer()
+        return
+
+    stock = await count_available_links()
+    if stock and quantity > stock:
+        await state.set_state(BulkOrderState.waiting_for_quantity)
+        text = (
+            f"Only <b>{stock}</b> pcs are available now. Send a smaller quantity."
+            if lang == "en"
+            else f"Сейчас в наличии только <b>{stock}</b> шт. Отправьте количество поменьше."
+        )
+        await callback.message.answer(text)
+        await callback.answer()
+        return
+
+    if method != "balance":
+        product = await get_product_config(PRODUCT_CODE)
+        total = int(product["price_rub"]) * quantity
+        method_names = {"platega": "Platega", "cryptobot": "Crypto Bot"}
+        method_name = method_names.get(method, method)
+        text = (
+            f"{ce('news_money')} Payment via <b>{method_name}</b> will be connected later.\n\n"
+            f"Quantity: <b>{quantity}</b>\n"
+            f"Amount: <b>{total} ₽</b>"
+            if lang == "en"
+            else f"{ce('news_money')} Оплата через <b>{method_name}</b> будет подключена позже.\n\n"
+            f"Количество: <b>{quantity}</b>\n"
+            f"Сумма: <b>{total} ₽</b>"
+        )
+        await callback.message.answer(text, reply_markup=bulk_payment_keyboard(quantity, lang))
+        await callback.answer()
+        return
+
+    await state.update_data(bulk_payment_method=method)
+    await state.set_state(BulkOrderState.waiting_for_contact)
+    text = (
+        f"{ce('support')} Send your Telegram username in this format: <b>@username</b>"
+        if lang == "en"
+        else f"{ce('support')} Напишите ваш Telegram юзернейм в таком формате: <b>@username</b>"
+    )
+    await callback.message.answer(text)
+    await callback.answer()
+
+
+@router.message(BulkOrderState.waiting_for_contact)
+async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) -> None:
+    await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    lang = await get_lang(message.from_user.id)
+    product = await get_product_config(PRODUCT_CODE)
+    data = await state.get_data()
+    quantity = int(data.get("bulk_quantity") or 0)
+    stock = await count_available_links()
+    contact = (message.text or "").strip()
+
+    if quantity <= 0:
+        await state.set_state(BulkOrderState.waiting_for_quantity)
+        text = "Send the quantity again." if lang == "en" else "Отправьте количество еще раз."
+        await message.answer(text)
+        return
+
+    if not TELEGRAM_USERNAME_RE.fullmatch(contact):
+        error_text = (
+            f"{ce('support')} Please send only your Telegram username in this format: <b>@username</b>"
+            if lang == "en"
+            else f"{ce('support')} Пожалуйста, отправьте только ваш Telegram юзернейм в формате: <b>@username</b>"
+        )
+        await message.answer(error_text)
+        return
+
+    if stock and quantity > stock:
+        await state.set_state(BulkOrderState.waiting_for_quantity)
+        text = (
+            f"Only <b>{stock}</b> pcs are available now. Send a smaller quantity."
+            if lang == "en"
+            else f"Сейчас в наличии только <b>{stock}</b> шт. Отправьте количество поменьше."
+        )
+        await message.answer(text)
+        return
+
+    username = f"@{message.from_user.username}" if message.from_user.username else "username не указан"
+    total = int(product["price_rub"]) * quantity
+    order_title = f"{product['title']} ×{quantity}"
+    status = "Ожидает обработки" if stock >= quantity else "Резерв, нет в наличии"
+
+    order = await create_order(
+        user_id=message.from_user.id,
+        username=username,
+        product_code=PRODUCT_CODE,
+        product_title=order_title,
+        price_rub=total,
+        contact=contact,
+        status=status,
+    )
+
+    admin_message = (
+        f"{ce('cart')} <b>Новый заказ на несколько товаров</b>\n\n"
+        f"Заказ: #{order['id']}\n"
+        f"Товар: {product['title']}\n"
+        f"Количество: {quantity}\n"
+        f"Сумма: {total} ₽\n"
+        f"Оплата: баланс\n"
+        f"Наличие ссылок: {stock}\n"
+        f"Покупатель: {username}\n"
+        f"ID: <code>{message.from_user.id}</code>\n"
+        f"Контакт: {contact}"
+    )
+
+    if ADMIN_ID:
+        try:
+            await bot.send_message(int(ADMIN_ID), admin_message)
+        except ValueError:
+            logging.exception("ADMIN_ID must be a number")
+        except Exception:
+            logging.exception("Could not send bulk order to admin")
+
+    await state.clear()
+    done_text = (
+        f"{ce('ok')} Order for <b>{quantity}</b> items created. It is now visible in My purchases."
+        if lang == "en"
+        else f"{ce('ok')} Заказ на <b>{quantity}</b> шт. оформлен. Он появился в разделе «Мои покупки»."
+    )
+    await message.answer(done_text, reply_markup=start_keyboard(lang))
+
+
+@router.callback_query(F.data == "bulk:cancel")
+async def cancel_bulk_order(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await state.clear()
+    text = "Bulk purchase cancelled." if lang == "en" else "Покупка нескольких товаров отменена."
+    await callback.message.answer(text, reply_markup=product_keyboard(lang))
     await callback.answer()
 
 
