@@ -40,7 +40,7 @@ ADMIN_ID = os.getenv("ADMIN_ID")
 PRODUCT_CODE = "gemini_link_18_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 CE = {
-    "gemini": ("5332814802702056788", "💎"),
+    "gemini": ("5321197740800120767", "🤖"),
     "planet": ("5454102570312166471", "🪐"),
     "link": ("5454068128969417666", "🔗"),
     "stock": ("5348149223223211884", "📦"),
