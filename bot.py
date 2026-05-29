@@ -87,16 +87,37 @@ async def get_lang(user_id: int) -> str:
 
 def main_menu(lang: str = "ru") -> ReplyKeyboardMarkup:
     if lang == "en":
-        keyboard = [["Catalog", "Profile"], ["Support", "Help"]]
+        keyboard = [["Catalog", "Profile"], ["Support"]]
         placeholder = "Choose a section"
     else:
-        keyboard = [["Каталог", "Профиль"], ["Поддержка", "❓ Справка"]]
+        keyboard = [["Каталог", "Профиль"], ["Поддержка"]]
         placeholder = "Выберите раздел"
 
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=item) for item in row] for row in keyboard],
         resize_keyboard=True,
         input_field_placeholder=placeholder,
+    )
+
+
+def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
+    if lang == "en":
+        buttons = [
+            [InlineKeyboardButton(text="Catalog", callback_data="catalog:open")],
+            [InlineKeyboardButton(text="Profile", callback_data="profile:open")],
+            [InlineKeyboardButton(text="💬 Support", callback_data="support:open")],
+            [InlineKeyboardButton(text="❓ Help", callback_data="help:open")],
+        ]
+    else:
+        buttons = [
+            [InlineKeyboardButton(text="Каталог", callback_data="catalog:open")],
+            [InlineKeyboardButton(text="Профиль", callback_data="profile:open")],
+            [InlineKeyboardButton(text="💬 Поддержка", callback_data="support:open")],
+            [InlineKeyboardButton(text="❓ Справка", callback_data="help:open")],
+        ]
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=buttons
     )
 
 
@@ -378,7 +399,7 @@ def format_transactions(transactions: list, lang: str = "ru") -> str:
 async def start(message: Message) -> None:
     user = await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     lang = user["language"] if user["language"] in {"ru", "en"} else "ru"
-    await message.answer(await home_text(lang), reply_markup=main_menu(lang))
+    await message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
 
 
 @router.message(Command("myid"))
@@ -473,10 +494,24 @@ async def show_help(message: Message) -> None:
     await message.answer(help_text(lang), reply_markup=help_keyboard(lang))
 
 
+@router.callback_query(F.data == "help:open")
+async def open_help(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await callback.message.edit_text(help_text(lang), reply_markup=help_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "support:open")
+async def open_support(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await callback.message.edit_text(support_text(lang), reply_markup=help_keyboard(lang))
+    await callback.answer()
+
+
 @router.callback_query(F.data == "menu:home")
 async def open_home(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.answer(await home_text(lang), reply_markup=main_menu(lang))
+    await callback.message.edit_text(await home_text(lang), reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
