@@ -56,6 +56,9 @@ CE = {
     "globe": ("5447410659077661506", "🌐"),
     "chart": ("5244837092042750681", "📈"),
     "spark": ("5325547803936572038", "✨"),
+    "news_catalog": ("5229064374403998351", "🛍"),
+    "news_bolt": ("5456140674028019486", "⚡️"),
+    "news_money": ("5409048419211682843", "💵"),
 }
 
 
@@ -95,7 +98,7 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     if lang == "en":
         buttons = [
             [
-                InlineKeyboardButton(text="🗂 Catalog", callback_data="catalog:open"),
+                InlineKeyboardButton(text="🛍 Catalog", callback_data="catalog:open"),
                 InlineKeyboardButton(text="👤 Profile", callback_data="profile:open"),
             ],
             [InlineKeyboardButton(text="⚙️ Other", callback_data="misc:open")],
@@ -103,7 +106,7 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     else:
         buttons = [
             [
-                InlineKeyboardButton(text="🗂 Каталог", callback_data="catalog:open"),
+                InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog:open"),
                 InlineKeyboardButton(text="👤 Профиль", callback_data="profile:open"),
             ],
             [InlineKeyboardButton(text="⚙️ Прочее", callback_data="misc:open")],
@@ -124,7 +127,7 @@ async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"🤖 {product['title']} | {price} | {stock} {item_suffix}",
+                    text=f"🛍 {product['title']} | {price} | {stock} {item_suffix}",
                     callback_data=f"product:{PRODUCT_CODE}",
                 )
             ],
@@ -138,12 +141,12 @@ def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         buttons = [
             [
                 InlineKeyboardButton(text="Promo code", callback_data="payment:promo"),
-                InlineKeyboardButton(text="Pay Platega", callback_data="payment:platega"),
+                InlineKeyboardButton(text="💵 Pay Platega", callback_data="payment:platega"),
             ],
-            [InlineKeyboardButton(text="Pay Crypto Bot", callback_data="payment:cryptobot")],
-            [InlineKeyboardButton(text="Pay Bybit (USDT)", callback_data="payment:bybit")],
-            [InlineKeyboardButton(text="Pay with balance", callback_data="order:start")],
-            [InlineKeyboardButton(text="Top up balance", callback_data="profile:topup")],
+            [InlineKeyboardButton(text="💵 Pay Crypto Bot", callback_data="payment:cryptobot")],
+            [InlineKeyboardButton(text="💵 Pay Bybit (USDT)", callback_data="payment:bybit")],
+            [InlineKeyboardButton(text="💵 Pay with balance", callback_data="order:start")],
+            [InlineKeyboardButton(text="💵 Top up balance", callback_data="profile:topup")],
             [InlineKeyboardButton(text="← Back", callback_data="catalog:open")],
             [InlineKeyboardButton(text="← Menu", callback_data="menu:home")],
         ]
@@ -151,12 +154,12 @@ def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         buttons = [
             [
                 InlineKeyboardButton(text="Промокод для скидки", callback_data="payment:promo"),
-                InlineKeyboardButton(text="Оплатить Platega", callback_data="payment:platega"),
+                InlineKeyboardButton(text="💵 Оплатить Platega", callback_data="payment:platega"),
             ],
-            [InlineKeyboardButton(text="Оплатить Crypto Bot", callback_data="payment:cryptobot")],
-            [InlineKeyboardButton(text="Оплатить Bybit (USDT)", callback_data="payment:bybit")],
-            [InlineKeyboardButton(text="Заплатить балансом", callback_data="order:start")],
-            [InlineKeyboardButton(text="Пополнить баланс", callback_data="profile:topup")],
+            [InlineKeyboardButton(text="💵 Оплатить Crypto Bot", callback_data="payment:cryptobot")],
+            [InlineKeyboardButton(text="💵 Оплатить Bybit (USDT)", callback_data="payment:bybit")],
+            [InlineKeyboardButton(text="💵 Заплатить балансом", callback_data="order:start")],
+            [InlineKeyboardButton(text="💵 Пополнить баланс", callback_data="profile:topup")],
             [InlineKeyboardButton(text="← Назад", callback_data="catalog:open")],
             [InlineKeyboardButton(text="← В меню", callback_data="menu:home")],
         ]
@@ -196,7 +199,7 @@ def misc_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 def profile_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     if lang == "en":
         buttons = [
-            ("💳 Top up balance", "profile:topup"),
+            ("💵 Top up balance", "profile:topup"),
             ("🙋 My purchases", "profile:purchases"),
             ("🎟 Promo code", "profile:promo"),
             ("📈 Transactions", "profile:transactions"),
@@ -206,7 +209,7 @@ def profile_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         ]
     else:
         buttons = [
-            ("💳 Пополнить баланс", "profile:topup"),
+            ("💵 Пополнить баланс", "profile:topup"),
             ("🙋 Мои покупки", "profile:purchases"),
             ("🎟 Промокод", "profile:promo"),
             ("📈 Транзакции", "profile:transactions"),
@@ -262,8 +265,8 @@ async def home_text(lang: str = "ru") -> str:
             "</blockquote>\n\n"
             f"{ce('fire')} <b>Why choose us:</b>\n"
             "<blockquote>"
-            f"{ce('bolt')} Fast delivery\n"
-            f"{ce('card')} Easy balance top-up\n"
+            f"{ce('news_bolt')} Fast delivery\n"
+            f"{ce('news_money')} Easy balance top-up\n"
             f"{ce('ok')} Activation warranty\n"
             f"{ce('support')} Support: {SUPPORT_USERNAME}"
             "</blockquote>\n\n"
@@ -280,8 +283,8 @@ async def home_text(lang: str = "ru") -> str:
         "</blockquote>\n\n"
         f"{ce('fire')} <b>Наши преимущества:</b>\n"
         "<blockquote>"
-        f"{ce('bolt')} Быстрая выдача\n"
-        f"{ce('card')} Удобное пополнение баланса\n"
+        f"{ce('news_bolt')} Быстрая выдача\n"
+        f"{ce('news_money')} Удобное пополнение баланса\n"
         f"{ce('ok')} Гарантия на активацию\n"
         f"{ce('support')} Поддержка: {SUPPORT_USERNAME}"
         "</blockquote>\n\n"
@@ -318,18 +321,18 @@ async def product_text(lang: str = "ru") -> str:
         return (
             f"{ce('gemini')} <b>{product['title']}</b>\n\n"
             f"{product['description']}\n\n"
-            f"{ce('card')} <b>Price:</b> {price}\n"
+            f"{ce('news_money')} <b>Price:</b> {price}\n"
             f"{ce('stock')} <b>Stock:</b> {stock}\n"
-            f"{ce('bolt')} <b>Delivery:</b> after order confirmation.\n\n"
+            f"{ce('news_bolt')} <b>Delivery:</b> after order confirmation.\n\n"
             "If links are temporarily out of stock, your order can be reserved and processed after restock."
         )
 
     return (
         f"{ce('gemini')} <b>{product['title']}</b>\n\n"
         f"{product['description']}\n\n"
-        f"{ce('card')} <b>Цена:</b> {price}\n"
+        f"{ce('news_money')} <b>Цена:</b> {price}\n"
         f"{ce('stock')} <b>Количество:</b> {stock}\n"
-        f"{ce('bolt')} <b>Выдача:</b> после подтверждения заказа.\n\n"
+        f"{ce('news_bolt')} <b>Выдача:</b> после подтверждения заказа.\n\n"
         "Если ссылки временно закончились, заказ можно зарезервировать и обработать после пополнения наличия."
     )
 
@@ -421,7 +424,7 @@ async def profile_text(user_id: int, lang: str = "ru") -> str:
         return (
             f"{ce('gemini')} <b>Profile</b>\n\n"
             f"ID: <code>{user_id}</code>\n"
-            f"{ce('card')} Balance: <b>{balance} ₽</b>\n"
+            f"{ce('news_money')} Balance: <b>{balance} ₽</b>\n"
             f"Orders: <b>{len(orders)}</b>\n"
             f"Referral code: <code>{ref_code}</code>"
         )
@@ -429,7 +432,7 @@ async def profile_text(user_id: int, lang: str = "ru") -> str:
     return (
         f"{ce('gemini')} <b>Профиль</b>\n\n"
         f"ID: <code>{user_id}</code>\n"
-        f"{ce('card')} Баланс: <b>{balance} ₽</b>\n"
+        f"{ce('news_money')} Баланс: <b>{balance} ₽</b>\n"
         f"Покупок оформлено: <b>{len(orders)}</b>\n"
         f"Реф. код: <code>{ref_code}</code>"
     )
@@ -563,7 +566,8 @@ async def add_links_from_next_message(message: Message, state: FSMContext) -> No
 @router.message(F.text.casefold().in_({"каталог", "catalog"}))
 async def show_catalog(message: Message) -> None:
     lang = await get_lang(message.from_user.id)
-    await message.answer("Catalog:" if lang == "en" else "Каталог:", reply_markup=await catalog_keyboard(lang))
+    title = f"{ce('news_catalog')} Catalog:" if lang == "en" else f"{ce('news_catalog')} Каталог:"
+    await message.answer(title, reply_markup=await catalog_keyboard(lang))
 
 
 @router.message(F.text.casefold().in_({"профиль", "profile"}))
@@ -644,7 +648,8 @@ async def open_home(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "catalog:open")
 async def open_catalog(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text("Catalog:" if lang == "en" else "Каталог:", reply_markup=await catalog_keyboard(lang))
+    title = f"{ce('news_catalog')} Catalog:" if lang == "en" else f"{ce('news_catalog')} Каталог:"
+    await callback.message.edit_text(title, reply_markup=await catalog_keyboard(lang))
     await callback.answer()
 
 
@@ -667,9 +672,9 @@ async def open_profile(callback: CallbackQuery) -> None:
 async def profile_topup(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     text = (
-        "💳 Balance top-up is handled by the administrator for now. Message support with the amount and payment method."
+        "💵 Balance top-up is handled by the administrator for now. Message support with the amount and payment method."
         if lang == "en"
-        else "💳 Пополнение баланса пока проходит через администратора. Напишите сумму и способ оплаты в поддержку."
+        else "💵 Пополнение баланса пока проходит через администратора. Напишите сумму и способ оплаты в поддержку."
     )
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
     await callback.answer()
