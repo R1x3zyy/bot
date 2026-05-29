@@ -260,6 +260,14 @@ async def get_lang(user_id: int) -> str:
     return lang if lang in {"ru", "en"} else "ru"
 
 
+def display_user_name(user: object) -> str:
+    username = getattr(user, "username", None)
+    first_name = getattr(user, "first_name", None)
+    if username:
+        return f"@{username}"
+    return first_name or ""
+
+
 def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     if lang == "en":
         buttons = [
@@ -493,14 +501,15 @@ def language_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-async def home_text(lang: str = "ru") -> str:
+async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
     product = await get_product_config(PRODUCT_CODE)
     stock = await count_available_links()
     price = format_price(product)
+    greeting_name = f", {html.escape(user_name)}" if user_name else ""
 
     if lang == "en":
         return (
-            f"{ce('spark')} <b>Welcome to the store!</b>\n\n"
+            f"{ce('spark')} <b>Welcome to the store{greeting_name}!</b>\n\n"
             f"{ce('gemini')} <b>Available product:</b>\n"
             "<blockquote>"
             f"{ce('gemini')} {product['title']} | {price}\n"
@@ -518,7 +527,7 @@ async def home_text(lang: str = "ru") -> str:
         )
 
     return (
-        f"{ce('spark')} <b>Добро пожаловать в магазин!</b>\n\n"
+        f"{ce('spark')} <b>Добро пожаловать в магазин{greeting_name}!</b>\n\n"
         f"{ce('shop')} <b>В нашем магазине вы можете приобрести:</b>\n"
         "<blockquote>"
         f"{ce('gemini')} {product['title']} | {price}\n"
@@ -946,7 +955,7 @@ async def start(message: Message) -> None:
         await cleanup.delete()
     except Exception:
         logging.exception("Could not delete reply keyboard cleanup message")
-    await message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
+    await message.answer(await home_text(lang, display_user_name(message.from_user)), reply_markup=start_keyboard(lang))
 
 
 @router.callback_query(F.data == "subscription:check")
@@ -960,7 +969,7 @@ async def check_subscription(callback: CallbackQuery, bot: Bot) -> None:
 
     text = f"{ce('ok')} Subscription confirmed." if lang == "en" else f"{ce('ok')} Подписка подтверждена."
     await callback.message.answer(text)
-    await callback.message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
+    await callback.message.answer(await home_text(lang, display_user_name(callback.from_user)), reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
@@ -1224,7 +1233,7 @@ async def cancel_review(callback: CallbackQuery, state: FSMContext) -> None:
 async def open_home(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(await home_text(lang), reply_markup=start_keyboard(lang))
+    await callback.message.edit_text(await home_text(lang, display_user_name(callback.from_user)), reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
@@ -1493,7 +1502,7 @@ async def set_language(callback: CallbackQuery) -> None:
     await update_user_language(callback.from_user.id, lang)
     text = f"{ce('ok')} Language changed to English." if lang == "en" else f"{ce('ok')} Язык изменён на русский."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
-    await callback.message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
+    await callback.message.answer(await home_text(lang, display_user_name(callback.from_user)), reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
