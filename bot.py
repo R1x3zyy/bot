@@ -14,9 +14,8 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    KeyboardButton,
     Message,
-    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
 )
 from dotenv import load_dotenv
 
@@ -92,28 +91,28 @@ async def get_lang(user_id: int) -> str:
     return lang if lang in {"ru", "en"} else "ru"
 
 
-def main_menu(lang: str = "ru") -> ReplyKeyboardMarkup:
-    if lang == "en":
-        keyboard = [["Catalog", "Profile"], ["Support"]]
-        placeholder = "Choose a section"
-    else:
-        keyboard = [["Каталог", "Профиль"], ["Поддержка"]]
-        placeholder = "Выберите раздел"
-
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=item) for item in row] for row in keyboard],
-        resize_keyboard=True,
-        input_field_placeholder=placeholder,
-    )
-
-
 def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
-    help_text = "❓ Help" if lang == "en" else "❓ Справка"
+    if lang == "en":
+        buttons = [
+            [
+                InlineKeyboardButton(text="🗂 Catalog", callback_data="catalog:open"),
+                InlineKeyboardButton(text="👤 Profile", callback_data="profile:open"),
+            ],
+            [InlineKeyboardButton(text="⚙️ Other", callback_data="misc:open")],
+            [InlineKeyboardButton(text="🔒 Private", callback_data="privates:open")],
+        ]
+    else:
+        buttons = [
+            [
+                InlineKeyboardButton(text="🗂 Каталог", callback_data="catalog:open"),
+                InlineKeyboardButton(text="👤 Профиль", callback_data="profile:open"),
+            ],
+            [InlineKeyboardButton(text="⚙️ Прочее", callback_data="misc:open")],
+            [InlineKeyboardButton(text="🔒 Приватики", callback_data="privates:open")],
+        ]
 
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=help_text, callback_data="help:open")],
-        ]
+        inline_keyboard=buttons
     )
 
 
@@ -158,6 +157,23 @@ def help_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/R1x3zyy")],
             [InlineKeyboardButton(text=home_text, callback_data="menu:home")],
+        ]
+    )
+
+
+def misc_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
+    back_text = "🔙 Back" if lang == "en" else "🔙 Назад"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🤝 Тех поддержка", url="https://t.me/R1x3zyy")],
+            [
+                InlineKeyboardButton(text="📣 Наш канал", url="https://t.me/r1x3zyyshop"),
+                InlineKeyboardButton(text="📝 Отзывы", callback_data="misc:reviews"),
+            ],
+            [InlineKeyboardButton(text="❓ FAQ", callback_data="misc:faq")],
+            [InlineKeyboardButton(text="🛡 Политика конфид.", callback_data="misc:privacy")],
+            [InlineKeyboardButton(text="⚙️ Польз. соглашение", callback_data="misc:terms")],
+            [InlineKeyboardButton(text=back_text, callback_data="menu:home")],
         ]
     )
 
@@ -322,6 +338,71 @@ def help_text(lang: str = "ru") -> str:
     )
 
 
+def misc_text(lang: str = "ru") -> str:
+    if lang == "en":
+        return (
+            f"{ce('spark')} <b>Other</b>\n\n"
+            "Here you can find support, documents, FAQ and useful links."
+        )
+
+    return (
+        f"{ce('spark')} <b>Прочее</b>\n\n"
+        "Здесь собраны поддержка, документы, FAQ и полезные ссылки."
+    )
+
+
+def faq_text(lang: str = "ru") -> str:
+    if lang == "en":
+        return (
+            "❓ <b>FAQ</b>\n\n"
+            "After placing an order, send your Telegram username in the <b>@username</b> format.\n\n"
+            "Delivery is processed after order confirmation. If links are out of stock, the order can be reserved."
+        )
+
+    return (
+        "❓ <b>FAQ</b>\n\n"
+        "После оформления заказа отправьте свой Telegram юзернейм в формате <b>@username</b>.\n\n"
+        "Выдача проходит после подтверждения заказа. Если ссылок временно нет, заказ можно зарезервировать."
+    )
+
+
+def privacy_text(lang: str = "ru") -> str:
+    if lang == "en":
+        return (
+            "🛡 <b>Privacy Policy</b>\n\n"
+            "https://telegra.ph/Politika-konfidencialnosti-04-01-26"
+        )
+
+    return (
+        "🛡 <b>Политика конфиденциальности</b>\n\n"
+        "https://telegra.ph/Politika-konfidencialnosti-04-01-26"
+    )
+
+
+def terms_text(lang: str = "ru") -> str:
+    if lang == "en":
+        return (
+            "⚙️ <b>User Agreement</b>\n\n"
+            "https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19"
+        )
+
+    return (
+        "⚙️ <b>Пользовательское соглашение</b>\n\n"
+        "https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19"
+    )
+
+
+def reviews_text(lang: str = "ru") -> str:
+    return "📝 Reviews will be added later." if lang == "en" else "📝 Отзывы будут добавлены позже."
+
+
+def privates_text(lang: str = "ru") -> str:
+    if lang == "en":
+        return "🔒 Private section will be available later."
+
+    return "🔒 Раздел «Приватики» будет доступен позже."
+
+
 async def profile_text(user_id: int, lang: str = "ru") -> str:
     user = await get_user(user_id)
     orders = await get_user_orders(user_id)
@@ -396,6 +477,11 @@ def format_transactions(transactions: list, lang: str = "ru") -> str:
 async def start(message: Message) -> None:
     user = await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     lang = user["language"] if user["language"] in {"ru", "en"} else "ru"
+    cleanup = await message.answer("Меню обновлено.", reply_markup=ReplyKeyboardRemove())
+    try:
+        await cleanup.delete()
+    except Exception:
+        logging.exception("Could not delete reply keyboard cleanup message")
     await message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
 
 
@@ -502,6 +588,48 @@ async def open_help(callback: CallbackQuery) -> None:
 async def open_support(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     await callback.message.edit_text(support_text(lang), reply_markup=help_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "misc:open")
+async def open_misc(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await callback.message.edit_text(misc_text(lang), reply_markup=misc_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "misc:faq")
+async def open_faq(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await callback.message.edit_text(faq_text(lang), reply_markup=misc_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "misc:privacy")
+async def open_privacy(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await callback.message.edit_text(privacy_text(lang), reply_markup=misc_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "misc:terms")
+async def open_terms(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await callback.message.edit_text(terms_text(lang), reply_markup=misc_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "misc:reviews")
+async def open_reviews(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await callback.message.edit_text(reviews_text(lang), reply_markup=misc_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "privates:open")
+async def open_privates(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await callback.message.edit_text(privates_text(lang), reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
@@ -622,7 +750,7 @@ async def set_language(callback: CallbackQuery) -> None:
     await update_user_language(callback.from_user.id, lang)
     text = f"{ce('ok')} Language changed to English." if lang == "en" else f"{ce('ok')} Язык изменён на русский."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
-    await callback.message.answer(await home_text(lang), reply_markup=main_menu(lang))
+    await callback.message.answer(await home_text(lang), reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
@@ -693,14 +821,14 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
         if lang == "en"
         else f"{ce('ok')} Заказ оформлен. Он появился в разделе «Мои покупки». Администратор свяжется с вами."
     )
-    await message.answer(done_text, reply_markup=main_menu(lang))
+    await message.answer(done_text, reply_markup=start_keyboard(lang))
 
 
 @router.message()
 async def fallback(message: Message) -> None:
     lang = await get_lang(message.from_user.id)
     text = "Choose an action from the menu." if lang == "en" else "Выберите действие в меню."
-    await message.answer(text, reply_markup=main_menu(lang))
+    await message.answer(text, reply_markup=start_keyboard(lang))
 
 
 async def main() -> None:
