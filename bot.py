@@ -366,22 +366,12 @@ def misc_text(lang: str = "ru") -> str:
     if lang == "en":
         return (
             f"{ce('news_gear')} <b>Other</b>\n\n"
-            f"{ce('news_chat')} Support\n"
-            f"{ce('news_announce')} Our channel\n"
-            f"{ce('news_pencil')} Reviews\n"
-            f"{ce('news_question')} FAQ\n"
-            f"{ce('news_shield')} Privacy policy\n"
-            f"{ce('news_gear')} User agreement"
+            "Additional sections are collected here."
         )
 
     return (
         f"{ce('news_gear')} <b>Прочее</b>\n\n"
-        f"{ce('news_chat')} Тех поддержка\n"
-        f"{ce('news_announce')} Наш канал\n"
-        f"{ce('news_pencil')} Отзывы\n"
-        f"{ce('news_question')} FAQ\n"
-        f"{ce('news_shield')} Политика конфиденциальности\n"
-        f"{ce('news_gear')} Пользовательское соглашение"
+        "Тут собраны дополнительные разделы."
     )
 
 
