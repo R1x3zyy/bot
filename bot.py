@@ -99,7 +99,6 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="👤 Profile", callback_data="profile:open"),
             ],
             [InlineKeyboardButton(text="⚙️ Other", callback_data="misc:open")],
-            [InlineKeyboardButton(text="🔒 Private", callback_data="privates:open")],
         ]
     else:
         buttons = [
@@ -108,7 +107,6 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="👤 Профиль", callback_data="profile:open"),
             ],
             [InlineKeyboardButton(text="⚙️ Прочее", callback_data="misc:open")],
-            [InlineKeyboardButton(text="🔒 Приватики", callback_data="privates:open")],
         ]
 
     return InlineKeyboardMarkup(
@@ -413,13 +411,6 @@ def reviews_text(lang: str = "ru") -> str:
     return "📝 Reviews will be added later." if lang == "en" else "📝 Отзывы будут добавлены позже."
 
 
-def privates_text(lang: str = "ru") -> str:
-    if lang == "en":
-        return "🔒 Private section will be available later."
-
-    return "🔒 Раздел «Приватики» будет доступен позже."
-
-
 async def profile_text(user_id: int, lang: str = "ru") -> str:
     user = await get_user(user_id)
     orders = await get_user_orders(user_id)
@@ -640,13 +631,6 @@ async def open_terms(callback: CallbackQuery) -> None:
 async def open_reviews(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     await callback.message.edit_text(reviews_text(lang), reply_markup=misc_keyboard(lang))
-    await callback.answer()
-
-
-@router.callback_query(F.data == "privates:open")
-async def open_privates(callback: CallbackQuery) -> None:
-    lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(privates_text(lang), reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
