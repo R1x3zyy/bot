@@ -137,17 +137,34 @@ async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 
 def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     if lang == "en":
-        order_text = "🛒 Place order"
-        back_text = "⬅️ Back to catalog"
+        buttons = [
+            [
+                InlineKeyboardButton(text="Promo code", callback_data="payment:promo"),
+                InlineKeyboardButton(text="Pay Platega", callback_data="payment:platega"),
+            ],
+            [InlineKeyboardButton(text="Pay Crypto Bot", callback_data="payment:cryptobot")],
+            [InlineKeyboardButton(text="Pay Bybit (USDT)", callback_data="payment:bybit")],
+            [InlineKeyboardButton(text="Pay with balance", callback_data="order:start")],
+            [InlineKeyboardButton(text="Top up balance", callback_data="profile:topup")],
+            [InlineKeyboardButton(text="← Back", callback_data="catalog:open")],
+            [InlineKeyboardButton(text="← Menu", callback_data="menu:home")],
+        ]
     else:
-        order_text = "🛒 Оформить заказ"
-        back_text = "⬅️ Назад в каталог"
+        buttons = [
+            [
+                InlineKeyboardButton(text="Промокод для скидки", callback_data="payment:promo"),
+                InlineKeyboardButton(text="Оплатить Platega", callback_data="payment:platega"),
+            ],
+            [InlineKeyboardButton(text="Оплатить Crypto Bot", callback_data="payment:cryptobot")],
+            [InlineKeyboardButton(text="Оплатить Bybit (USDT)", callback_data="payment:bybit")],
+            [InlineKeyboardButton(text="Заплатить балансом", callback_data="order:start")],
+            [InlineKeyboardButton(text="Пополнить баланс", callback_data="profile:topup")],
+            [InlineKeyboardButton(text="← Назад", callback_data="catalog:open")],
+            [InlineKeyboardButton(text="← В меню", callback_data="menu:home")],
+        ]
 
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=order_text, callback_data="order:start")],
-            [InlineKeyboardButton(text=back_text, callback_data="catalog:open")],
-        ]
+        inline_keyboard=buttons
     )
 
 
@@ -689,6 +706,31 @@ async def profile_promo(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     text = f"{ce('fire')} No active promo codes right now." if lang == "en" else f"{ce('fire')} Сейчас активных промокодов нет."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("payment:"))
+async def payment_placeholder(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    method = callback.data.split(":", 1)[1]
+    names = {
+        "promo": "промокоды",
+        "platega": "Platega",
+        "cryptobot": "Crypto Bot",
+        "bybit": "Bybit (USDT)",
+    }
+    method_name = names.get(method, "оплата")
+    if lang == "en":
+        text = (
+            f"{ce('spark')} <b>{method_name}</b>\n\n"
+            "This payment option will be connected later. For now, use balance payment or contact support."
+        )
+    else:
+        text = (
+            f"{ce('spark')} <b>{method_name}</b>\n\n"
+            "Этот способ оплаты будет подключен позже. Пока можно оплатить балансом или написать в поддержку."
+        )
+    await callback.message.edit_text(text, reply_markup=product_keyboard(lang))
     await callback.answer()
 
 
