@@ -39,6 +39,26 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 PRODUCT_CODE = "gemini_link_18_month"
 SUPPORT_USERNAME = "@R1x3zyy"
+CE = {
+    "gemini": ("5460917519474779991", "💎"),
+    "planet": ("5454102570312166471", "🪐"),
+    "link": ("5454068128969417666", "🔗"),
+    "stock": ("5348149223223211884", "📦"),
+    "cart": ("5319204558147188648", "🛒"),
+    "card": ("5454134258580877567", "💳"),
+    "support": ("5453952087543015968", "💬"),
+    "fire": ("5454182246250474905", "🔥"),
+    "bolt": ("5458746443571421160", "⚡️"),
+    "ok": ("5273806972871787310", "✅"),
+    "globe": ("5447410659077661506", "🌐"),
+    "chart": ("5244837092042750681", "📈"),
+    "spark": ("5325547803936572038", "✨"),
+}
+
+
+def ce(name: str) -> str:
+    emoji_id, fallback = CE[name]
+    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
 
 class OrderState(StatesGroup):
@@ -167,42 +187,42 @@ async def home_text(lang: str = "ru") -> str:
 
     if lang == "en":
         return (
-            "👋 <b>Welcome to the store!</b>\n\n"
-            "🛒 <b>Available product:</b>\n"
+            f"{ce('spark')} <b>Welcome to the store!</b>\n\n"
+            f"{ce('cart')} <b>Available product:</b>\n"
             "<blockquote>"
-            f"🔗 {product['title']}\n"
-            "🤖 Google AI Pro for 18 months\n"
+            f"{ce('gemini')} {product['title']}\n"
+            f"{ce('planet')} Google AI Pro for 18 months\n"
             "💾 Google Drive 5 TB\n"
-            "⚡ Activation via personal link"
+            f"{ce('link')} Activation via personal link"
             "</blockquote>\n\n"
-            "✨ <b>Why choose us:</b>\n"
+            f"{ce('fire')} <b>Why choose us:</b>\n"
             "<blockquote>"
-            "⚡ Fast delivery\n"
-            "💳 Easy balance top-up\n"
-            "✅ Activation warranty\n"
-            f"💬 Support: {SUPPORT_USERNAME}"
+            f"{ce('bolt')} Fast delivery\n"
+            f"{ce('card')} Easy balance top-up\n"
+            f"{ce('ok')} Activation warranty\n"
+            f"{ce('support')} Support: {SUPPORT_USERNAME}"
             "</blockquote>\n\n"
-            f"📦 <b>In stock:</b> {stock}\n\n"
+            f"{ce('stock')} <b>In stock:</b> {stock}\n\n"
             "Choose an action below:"
         )
 
     return (
-        "👋 <b>Добро пожаловать в магазин!</b>\n\n"
-        "🛒 <b>В нашем магазине вы можете приобрести:</b>\n"
+        f"{ce('spark')} <b>Добро пожаловать в магазин!</b>\n\n"
+        f"{ce('cart')} <b>В нашем магазине вы можете приобрести:</b>\n"
         "<blockquote>"
-        f"🔗 {product['title']}\n"
-        "🤖 Google AI Pro на 18 месяцев\n"
+        f"{ce('gemini')} {product['title']}\n"
+        f"{ce('planet')} Google AI Pro на 18 месяцев\n"
         "💾 Google Drive 5 ТБ\n"
-        "⚡ Активация по персональной ссылке"
+        f"{ce('link')} Активация по персональной ссылке"
         "</blockquote>\n\n"
-        "✨ <b>Наши преимущества:</b>\n"
+        f"{ce('fire')} <b>Наши преимущества:</b>\n"
         "<blockquote>"
-        "⚡ Быстрая выдача\n"
-        "💳 Удобное пополнение баланса\n"
-        "✅ Гарантия на активацию\n"
-        f"💬 Поддержка: {SUPPORT_USERNAME}"
+        f"{ce('bolt')} Быстрая выдача\n"
+        f"{ce('card')} Удобное пополнение баланса\n"
+        f"{ce('ok')} Гарантия на активацию\n"
+        f"{ce('support')} Поддержка: {SUPPORT_USERNAME}"
         "</blockquote>\n\n"
-        f"📦 <b>Сейчас в наличии:</b> {stock}\n\n"
+        f"{ce('stock')} <b>Сейчас в наличии:</b> {stock}\n\n"
         "Выберите действие ниже:"
     )
 
@@ -210,19 +230,19 @@ async def home_text(lang: str = "ru") -> str:
 def support_text(lang: str = "ru") -> str:
     if lang == "en":
         return (
-            "💬 <b>Support center</b>\n\n"
+            f"{ce('support')} <b>Support center</b>\n\n"
             "If you have a question about payment, delivery, activation or your order, "
             "message our support directly.\n\n"
-            f"👤 Support username: {SUPPORT_USERNAME}\n\n"
-            "We will help you as soon as possible. ✨"
+            f"{ce('ok')} Support username: {SUPPORT_USERNAME}\n\n"
+            f"We will help you as soon as possible. {ce('spark')}"
         )
 
     return (
-        "💬 <b>Центр поддержки</b>\n\n"
+        f"{ce('support')} <b>Центр поддержки</b>\n\n"
         "Если у вас вопрос по оплате, выдаче, активации или заказу, "
         "напишите в поддержку напрямую.\n\n"
-        f"👤 Юзернейм поддержки: {SUPPORT_USERNAME}\n\n"
-        "Поможем разобраться как можно быстрее. ✨"
+        f"{ce('ok')} Юзернейм поддержки: {SUPPORT_USERNAME}\n\n"
+        f"Поможем разобраться как можно быстрее. {ce('spark')}"
     )
 
 
@@ -234,20 +254,20 @@ async def product_text(lang: str = "ru") -> str:
 
     if lang == "en":
         return (
-            f"<b>🔗 {product['title']}</b>\n\n"
+            f"<b>{ce('gemini')} {product['title']}</b>\n\n"
             f"{product['description']}\n\n"
-            f"<b>Price:</b> {price_rub} ₽ / {price_usd:g} $\n"
-            f"<b>Stock:</b> {stock}\n"
-            "<b>Delivery:</b> after order confirmation.\n\n"
+            f"{ce('card')} <b>Price:</b> {price_rub} ₽ / {price_usd:g} $\n"
+            f"{ce('stock')} <b>Stock:</b> {stock}\n"
+            f"{ce('bolt')} <b>Delivery:</b> after order confirmation.\n\n"
             "If links are temporarily out of stock, your order can be reserved and processed after restock."
         )
 
     return (
-        f"<b>🔗 {product['title']}</b>\n\n"
+        f"<b>{ce('gemini')} {product['title']}</b>\n\n"
         f"{product['description']}\n\n"
-        f"<b>Цена:</b> {price_rub} ₽ / {price_usd:g} $\n"
-        f"<b>Количество:</b> {stock}\n"
-        "<b>Выдача:</b> после подтверждения заказа.\n\n"
+        f"{ce('card')} <b>Цена:</b> {price_rub} ₽ / {price_usd:g} $\n"
+        f"{ce('stock')} <b>Количество:</b> {stock}\n"
+        f"{ce('bolt')} <b>Выдача:</b> после подтверждения заказа.\n\n"
         "Если ссылки временно закончились, заказ можно зарезервировать и обработать после пополнения наличия."
     )
 
@@ -260,17 +280,17 @@ async def profile_text(user_id: int, lang: str = "ru") -> str:
 
     if lang == "en":
         return (
-            "<b>👤 Profile</b>\n\n"
+            f"<b>{ce('gemini')} Profile</b>\n\n"
             f"ID: <code>{user_id}</code>\n"
-            f"Balance: <b>{balance} ₽</b>\n"
+            f"{ce('card')} Balance: <b>{balance} ₽</b>\n"
             f"Orders: <b>{len(orders)}</b>\n"
             f"Referral code: <code>{ref_code}</code>"
         )
 
     return (
-        "<b>👤 Профиль</b>\n\n"
+        f"<b>{ce('gemini')} Профиль</b>\n\n"
         f"ID: <code>{user_id}</code>\n"
-        f"Баланс: <b>{balance} ₽</b>\n"
+        f"{ce('card')} Баланс: <b>{balance} ₽</b>\n"
         f"Покупок оформлено: <b>{len(orders)}</b>\n"
         f"Реф. код: <code>{ref_code}</code>"
     )
@@ -440,7 +460,7 @@ async def profile_purchases(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "profile:promo")
 async def profile_promo(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    text = "🎟 No active promo codes right now." if lang == "en" else "🎟 Сейчас активных промокодов нет."
+    text = f"{ce('fire')} No active promo codes right now." if lang == "en" else f"{ce('fire')} Сейчас активных промокодов нет."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
     await callback.answer()
 
@@ -484,7 +504,7 @@ async def profile_language(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     current = "English" if lang == "en" else "Русский"
     await callback.message.edit_text(
-        f"🌐 <b>Language / Язык</b>\n\nCurrent: <b>{current}</b>\n\nChoose language:",
+        f"{ce('globe')} <b>Language / Язык</b>\n\nCurrent: <b>{current}</b>\n\nChoose language:",
         reply_markup=language_keyboard(),
     )
     await callback.answer()
@@ -499,7 +519,7 @@ async def set_language(callback: CallbackQuery) -> None:
 
     await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     await update_user_language(callback.from_user.id, lang)
-    text = "✅ Language changed to English." if lang == "en" else "✅ Язык изменён на русский."
+    text = f"{ce('ok')} Language changed to English." if lang == "en" else f"{ce('ok')} Язык изменён на русский."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
     await callback.message.answer(await home_text(lang), reply_markup=main_menu(lang))
     await callback.answer()
@@ -510,9 +530,9 @@ async def start_order(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
     await state.set_state(OrderState.waiting_for_contact)
     text = (
-        "📩 Send your contact in one message: username, phone number or another convenient contact method."
+        f"{ce('support')} Send your contact in one message: username, phone number or another convenient contact method."
         if lang == "en"
-        else "📩 Отправьте контакт для связи одним сообщением: username, номер телефона или другой удобный способ."
+        else f"{ce('support')} Отправьте контакт для связи одним сообщением: username, номер телефона или другой удобный способ."
     )
     await callback.message.answer(text)
     await callback.answer()
@@ -539,7 +559,7 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
     )
 
     admin_message = (
-        "<b>🛒 Новый заказ</b>\n\n"
+        f"<b>{ce('cart')} Новый заказ</b>\n\n"
         f"Заказ: #{order['id']}\n"
         f"Товар: {product['title']}\n"
         f"Цена: {int(product['price_rub'])} ₽\n"
@@ -559,9 +579,9 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
 
     await state.clear()
     done_text = (
-        "✅ Order created. It is now visible in My purchases. The administrator will contact you."
+        f"{ce('ok')} Order created. It is now visible in My purchases. The administrator will contact you."
         if lang == "en"
-        else "✅ Заказ оформлен. Он появился в разделе «Мои покупки». Администратор свяжется с вами."
+        else f"{ce('ok')} Заказ оформлен. Он появился в разделе «Мои покупки». Администратор свяжется с вами."
     )
     await message.answer(done_text, reply_markup=main_menu(lang))
 

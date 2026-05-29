@@ -20,3 +20,4 @@
 - Конфигурация товара хранится в таблице `product_settings` и редактируется из админки.
 - Добавлены `DEPLOYMENT.md` и `Dockerfile`.
 - Добавлен CI/CD: GitHub Actions, GitLab CI и `scripts/deploy.sh`.
+- В тексты бота добавлены Telegram custom emoji из указанных наборов через `<tg-emoji>`.
