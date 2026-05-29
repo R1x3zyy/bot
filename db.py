@@ -90,6 +90,15 @@ async def ensure_schema() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 paid_at TIMESTAMPTZ
             );
+
+            CREATE TABLE IF NOT EXISTS reviews (
+                id BIGSERIAL PRIMARY KEY,
+                order_id BIGINT NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+                comment TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
             """
         )
         conn.execute(
@@ -410,6 +419,30 @@ async def update_order_status(order_id: int, status: str) -> dict | None:
 async def get_user_orders(user_id: int) -> list[dict]:
     with get_conn() as conn:
         return conn.execute("SELECT * FROM orders WHERE user_id = %s ORDER BY created_at", (user_id,)).fetchall()
+
+
+async def create_review(user_id: int, order_id: int, rating: int, comment: str) -> dict | None:
+    with get_conn() as conn:
+        order = conn.execute(
+            "SELECT id, product_title FROM orders WHERE id = %s AND user_id = %s",
+            (order_id, user_id),
+        ).fetchone()
+        if not order:
+            return None
+
+        review = conn.execute(
+            """
+            INSERT INTO reviews (order_id, user_id, rating, comment)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (order_id) DO NOTHING
+            RETURNING *
+            """,
+            (order_id, user_id, rating, comment),
+        ).fetchone()
+        if not review:
+            return None
+
+        return {**review, "product_title": order["product_title"]}
 
 
 async def get_transactions(user_id: int) -> list[dict]:

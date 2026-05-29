@@ -1,4 +1,5 @@
 import asyncio
+import html
 import logging
 import os
 import re
@@ -27,6 +28,7 @@ from db import (
     count_available_links,
     create_balance_order,
     create_crypto_payment,
+    create_review,
     ensure_schema,
     ensure_user,
     get_crypto_payment,
@@ -44,6 +46,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
+REVIEWS_CHANNEL_ID = os.getenv("REVIEWS_CHANNEL_ID")
 CRYPTOBOT_TOKEN = os.getenv("CRYPTOBOT_TOKEN")
 CRYPTOBOT_API_URL = os.getenv("CRYPTOBOT_API_URL", "https://pay.crypt.bot/api")
 PRODUCT_CODE = "gemini_link_18_month"
@@ -165,6 +168,10 @@ class CryptoOrderState(StatesGroup):
 
 class TopUpState(StatesGroup):
     waiting_for_amount = State()
+
+
+class ReviewState(StatesGroup):
+    waiting_for_comment = State()
 
 
 class AdminState(StatesGroup):
@@ -310,6 +317,28 @@ def cryptobot_invoice_keyboard(payment_id: int, invoice_url: str, lang: str = "r
         inline_keyboard=[
             [InlineKeyboardButton(text=pay_text, url=invoice_url)],
             [InlineKeyboardButton(text=check_text, callback_data=f"cryptobot:check:{payment_id}")],
+        ]
+    )
+
+
+def review_prompt_keyboard(order_id: int, lang: str = "ru") -> InlineKeyboardMarkup:
+    text = "⭐ Leave a review" if lang == "en" else "⭐ Оставить отзыв"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=text, callback_data=f"review:start:{order_id}")],
+        ]
+    )
+
+
+def review_rating_keyboard(order_id: int, lang: str = "ru") -> InlineKeyboardMarkup:
+    cancel_text = "Cancel" if lang == "en" else "Отмена"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=f"{rating} ⭐", callback_data=f"review:rating:{order_id}:{rating}")
+                for rating in range(1, 6)
+            ],
+            [InlineKeyboardButton(text=cancel_text, callback_data="review:cancel")],
         ]
     )
 
@@ -557,9 +586,9 @@ def terms_text(lang: str = "ru") -> str:
 
 def reviews_text(lang: str = "ru") -> str:
     return (
-        f"{ce('news_pencil')} Reviews will be added later."
+        f"{ce('news_pencil')} After a completed purchase, the bot will offer you to rate the order from 1 to 5 stars and add a comment."
         if lang == "en"
-        else f"{ce('news_pencil')} Отзывы будут добавлены позже."
+        else f"{ce('news_pencil')} После выполненной покупки бот предложит оценить заказ от 1 до 5 звезд и написать комментарий."
     )
 
 
@@ -707,6 +736,12 @@ async def deliver_order_links(message: Message, order_id: int, user_id: int, qua
         return []
     if links:
         await message.answer(delivery_text(links, lang))
+        review_text = (
+            f"{ce('news_pencil')} How was your purchase? You can leave a review."
+            if lang == "en"
+            else f"{ce('news_pencil')} Как прошла покупка? Можете оставить отзыв."
+        )
+        await message.answer(review_text, reply_markup=review_prompt_keyboard(order_id, lang))
     else:
         await message.answer(reserved_text(lang))
     return links
@@ -878,6 +913,105 @@ async def open_terms(callback: CallbackQuery) -> None:
 async def open_reviews(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     await callback.message.edit_text(reviews_text(lang), reply_markup=misc_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("review:start:"))
+async def start_review(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    order_id = int(callback.data.split(":")[-1])
+    text = (
+        f"{ce('news_pencil')} Rate your purchase from 1 to 5 stars."
+        if lang == "en"
+        else f"{ce('news_pencil')} Оцените покупку от 1 до 5 звезд."
+    )
+    await callback.message.answer(text, reply_markup=review_rating_keyboard(order_id, lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("review:rating:"))
+async def choose_review_rating(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
+    _, _, order_id, rating = callback.data.split(":")
+    await state.set_state(ReviewState.waiting_for_comment)
+    await state.update_data(review_order_id=int(order_id), review_rating=int(rating))
+    text = (
+        f"{ce('news_pencil')} Rating: <b>{rating} ⭐</b>\n\nSend a short comment about your purchase."
+        if lang == "en"
+        else f"{ce('news_pencil')} Оценка: <b>{rating} ⭐</b>\n\nНапишите короткий комментарий о покупке."
+    )
+    await callback.message.answer(text)
+    await callback.answer()
+
+
+@router.message(ReviewState.waiting_for_comment)
+async def receive_review_comment(message: Message, state: FSMContext, bot: Bot) -> None:
+    await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    lang = await get_lang(message.from_user.id)
+    data = await state.get_data()
+    order_id = int(data.get("review_order_id") or 0)
+    rating = int(data.get("review_rating") or 0)
+    comment = (message.text or "").strip()
+
+    if not comment:
+        await message.answer("Send a text comment." if lang == "en" else "Отправьте текстовый комментарий.")
+        return
+
+    if len(comment) > 1000:
+        await message.answer(
+            "Comment is too long. Send up to 1000 characters."
+            if lang == "en"
+            else "Комментарий слишком длинный. Отправьте до 1000 символов."
+        )
+        return
+
+    review = await create_review(message.from_user.id, order_id, rating, comment)
+    if not review:
+        await state.clear()
+        text = (
+            "Could not save the review. It may already exist for this order."
+            if lang == "en"
+            else "Не удалось сохранить отзыв. Возможно, по этому заказу отзыв уже оставлен."
+        )
+        await message.answer(text, reply_markup=start_keyboard(lang))
+        return
+
+    username = f"@{message.from_user.username}" if message.from_user.username else f"id:{message.from_user.id}"
+    stars = "⭐" * rating
+    channel_text = (
+        f"{ce('news_pencil')} <b>Новый отзыв</b>\n\n"
+        f"Товар: {html.escape(str(review['product_title']))}\n"
+        f"Оценка: {stars}\n"
+        f"Покупатель: {html.escape(username)}\n\n"
+        f"{html.escape(comment)}"
+    )
+
+    if REVIEWS_CHANNEL_ID:
+        try:
+            await bot.send_message(REVIEWS_CHANNEL_ID, channel_text)
+        except Exception:
+            logging.exception("Could not send review to channel")
+            if ADMIN_ID:
+                try:
+                    await bot.send_message(int(ADMIN_ID), "Не удалось отправить отзыв в канал. Проверьте REVIEWS_CHANNEL_ID и права бота.")
+                except Exception:
+                    logging.exception("Could not notify admin about review channel error")
+
+    await state.clear()
+    text = (
+        f"{ce('ok')} Thank you. Your review has been saved."
+        if lang == "en"
+        else f"{ce('ok')} Спасибо. Ваш отзыв сохранен."
+    )
+    await message.answer(text, reply_markup=start_keyboard(lang))
+
+
+@router.callback_query(F.data == "review:cancel")
+async def cancel_review(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
+    await state.clear()
+    text = "Review cancelled." if lang == "en" else "Отзыв отменен."
+    await callback.message.answer(text, reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
