@@ -39,6 +39,7 @@ from db import (
     get_user,
     get_user_orders,
     issue_links_to_order,
+    list_users,
     update_user_language,
 )
 
@@ -182,6 +183,10 @@ class AdminState(StatesGroup):
     waiting_for_links = State()
 
 
+class BroadcastState(StatesGroup):
+    waiting_for_text = State()
+
+
 router = Router()
 
 
@@ -196,6 +201,17 @@ def subscription_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=subscribe_text, url=REQUIRED_CHANNEL_URL)],
             [InlineKeyboardButton(text=check_text, callback_data="subscription:check")],
+        ]
+    )
+
+
+def broadcast_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Отправить всем", callback_data="broadcast:send"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="broadcast:cancel"),
+            ],
         ]
     )
 
@@ -1028,6 +1044,93 @@ async def add_links_command(message: Message, state: FSMContext) -> None:
         f"Добавлено ссылок: <b>{added}</b>\n"
         f"Теперь в наличии: <b>{await count_available_links()}</b>"
     )
+
+
+@router.message(Command("broadcast"))
+async def start_broadcast(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    await state.set_state(BroadcastState.waiting_for_text)
+    await message.answer(
+        f"{ce('news_announce')} <b>Рассылка всем пользователям</b>\n\n"
+        "Отправьте текст сообщения. После этого я покажу предпросмотр и попрошу подтверждение."
+    )
+
+
+@router.message(BroadcastState.waiting_for_text)
+async def receive_broadcast_text(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    text = (message.html_text or message.text or "").strip()
+    if not text:
+        await message.answer("Отправьте текст для рассылки.")
+        return
+
+    if len(text) > 3500:
+        await message.answer("Текст слишком длинный. Отправьте сообщение до 3500 символов.")
+        return
+
+    await state.update_data(broadcast_text=text)
+    users = await list_users(None)
+    await message.answer(
+        f"{ce('news_announce')} <b>Предпросмотр рассылки</b>\n\n"
+        f"{text}\n\n"
+        f"Получателей: <b>{len(users)}</b>",
+        reply_markup=broadcast_confirm_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "broadcast:cancel")
+async def cancel_broadcast(callback: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Недоступно.", show_alert=True)
+        return
+
+    await state.clear()
+    await callback.message.answer("Рассылка отменена.")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "broadcast:send")
+async def send_broadcast(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Недоступно.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    text = data.get("broadcast_text")
+    if not text:
+        await callback.message.answer("Текст рассылки не найден. Запустите /broadcast заново.")
+        await callback.answer()
+        return
+
+    users = await list_users(None)
+    sent = 0
+    failed = 0
+    await callback.message.answer(f"Начинаю рассылку для <b>{len(users)}</b> пользователей.")
+    for user in users:
+        if user["id"] == callback.from_user.id:
+            continue
+        try:
+            await bot.send_message(user["id"], text)
+            sent += 1
+            await asyncio.sleep(0.04)
+        except Exception:
+            failed += 1
+            logging.exception("Could not send broadcast to user %s", user["id"])
+
+    await state.clear()
+    await callback.message.answer(
+        f"{ce('ok')} <b>Рассылка завершена</b>\n\n"
+        f"Отправлено: <b>{sent}</b>\n"
+        f"Не удалось: <b>{failed}</b>"
+    )
+    await callback.answer()
 
 
 @router.message(AdminState.waiting_for_links)

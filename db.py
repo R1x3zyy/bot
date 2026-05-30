@@ -463,16 +463,18 @@ async def recent_orders(limit: int = 20) -> list[dict]:
         return conn.execute("SELECT * FROM orders ORDER BY created_at DESC LIMIT %s", (limit,)).fetchall()
 
 
-async def list_users(limit: int = 100) -> list[dict]:
+async def list_users(limit: int | None = 100) -> list[dict]:
     with get_conn() as conn:
+        limit_clause = "" if limit is None else "LIMIT %s"
+        params = () if limit is None else (limit,)
         return conn.execute(
-            """
+            f"""
             SELECT id, username, first_name, balance, language, ref_code, created_at
             FROM users
             ORDER BY created_at DESC
-            LIMIT %s
+            {limit_clause}
             """,
-            (limit,),
+            params,
         ).fetchall()
 
 
