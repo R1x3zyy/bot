@@ -351,6 +351,7 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="👤 Profile", callback_data="profile:open"),
             ],
             [InlineKeyboardButton(text="⚙️ Other", callback_data="misc:open")],
+            [InlineKeyboardButton(text="🌐 Language", callback_data="profile:language")],
         ]
     else:
         buttons = [
@@ -359,6 +360,7 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="👤 Профиль", callback_data="profile:open"),
             ],
             [InlineKeyboardButton(text="⚙️ Прочее", callback_data="misc:open")],
+            [InlineKeyboardButton(text="🌐 Язык / Language", callback_data="profile:language")],
         ]
 
     return InlineKeyboardMarkup(
