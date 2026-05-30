@@ -410,6 +410,14 @@ async def get_crypto_payment(payment_id: int) -> dict | None:
         return conn.execute("SELECT * FROM crypto_payments WHERE id = %s", (payment_id,)).fetchone()
 
 
+async def get_crypto_payment_by_invoice(invoice_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM crypto_payments WHERE invoice_id = %s",
+            (invoice_id,),
+        ).fetchone()
+
+
 async def complete_crypto_payment(payment_id: int, username: str, order_status: str) -> dict | None:
     with get_conn() as conn:
         payment = conn.execute(

@@ -1,5 +1,7 @@
 import os
 import secrets
+import hmac
+import hashlib
 from decimal import Decimal
 from typing import Any
 
@@ -16,11 +18,13 @@ from bot import notify_paid_payment, payment_username
 from db import (
     add_links,
     admin_stats,
+    complete_crypto_payment,
     complete_platega_payment,
     daily_unique_visits,
     delete_available_links,
     delete_link,
     ensure_schema,
+    get_crypto_payment_by_invoice,
     get_platega_payment_by_transaction,
     get_product_config,
     list_links,
@@ -38,6 +42,7 @@ ADMIN_LOGIN = os.getenv("ADMIN_LOGIN", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change_me")
 ADMIN_CORS_ORIGINS = os.getenv("ADMIN_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+CRYPTOBOT_TOKEN = os.getenv("CRYPTOBOT_TOKEN")
 PLATEGA_MERCHANT_ID = os.getenv("PLATEGA_MERCHANT_ID", "")
 PLATEGA_SECRET = os.getenv("PLATEGA_SECRET", "")
 
@@ -82,6 +87,15 @@ def check_platega_headers(merchant_id: str | None, secret: str | None) -> None:
     valid_merchant = bool(PLATEGA_MERCHANT_ID) and secrets.compare_digest(merchant_id or "", PLATEGA_MERCHANT_ID)
     valid_secret = bool(PLATEGA_SECRET) and secrets.compare_digest(secret or "", PLATEGA_SECRET)
     if not valid_merchant or not valid_secret:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
+
+
+def check_cryptobot_signature(body: bytes, signature: str | None) -> None:
+    if not CRYPTOBOT_TOKEN or not signature:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
+    secret = hashlib.sha256(CRYPTOBOT_TOKEN.encode("utf-8")).digest()
+    expected = hmac.new(secret, body, hashlib.sha256).hexdigest()
+    if not secrets.compare_digest(expected, signature):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
 
 
@@ -139,6 +153,43 @@ async def platega_webhook(
             await telegram_bot.session.close()
 
     return {"ok": True, "status": payment_status}
+
+
+@app.post("/api/webhooks/cryptobot")
+async def cryptobot_webhook(
+    request: Request,
+    crypto_pay_api_signature: str | None = Header(default=None, alias="crypto-pay-api-signature"),
+) -> dict:
+    body = await request.body()
+    check_cryptobot_signature(body, crypto_pay_api_signature)
+    payload = await request.json()
+
+    if payload.get("update_type") != "invoice_paid":
+        return {"ok": True, "ignored": "unsupported_update"}
+
+    invoice = payload.get("payload") or {}
+    invoice_id = invoice.get("invoice_id")
+    if not invoice_id:
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
+
+    payment = await get_crypto_payment_by_invoice(int(invoice_id))
+    if not payment:
+        return {"ok": True, "ignored": "unknown_invoice"}
+
+    username = await payment_username(int(payment["user_id"]))
+    completed = await complete_crypto_payment(
+        int(payment["id"]),
+        username,
+        "Оплачен Crypto Bot, ожидает обработки",
+    )
+    if completed and BOT_TOKEN:
+        telegram_bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        try:
+            await notify_paid_payment(telegram_bot, completed, "Crypto Bot")
+        finally:
+            await telegram_bot.session.close()
+
+    return {"ok": True, "status": "paid"}
 
 
 @app.get("/api/stats")

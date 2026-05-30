@@ -1068,7 +1068,7 @@ async def auto_payment_watcher(bot: Bot) -> None:
         except Exception:
             logging.exception("Payment watcher failed")
 
-        await asyncio.sleep(15)
+        await asyncio.sleep(5)
 
 
 async def quantity_text(lang: str = "ru") -> str:
