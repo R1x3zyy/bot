@@ -265,7 +265,67 @@ label {
 }
 
 .panel-heading h2 {
+  align-items: center;
+  display: flex;
+  gap: 8px;
   margin: 0;
+}
+
+.muted-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.visits-panel {
+  margin-bottom: 16px;
+}
+
+.visits-chart {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(14, minmax(38px, 1fr));
+  min-height: 220px;
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.visit-bar {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-rows: 24px 150px 20px;
+  min-width: 38px;
+  text-align: center;
+}
+
+.visit-bar strong {
+  font-size: 13px;
+}
+
+.visit-bar small {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bar-track {
+  align-items: end;
+  background: var(--panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  display: flex;
+  height: 150px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.bar-track span {
+  background: linear-gradient(180deg, #14b8a6, #0f766e);
+  border-radius: 5px 5px 0 0;
+  display: block;
+  width: 100%;
 }
 
 .split {

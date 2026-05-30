@@ -45,6 +45,7 @@ from db import (
     list_active_crypto_payments,
     list_pending_platega_payments,
     list_users,
+    record_bot_visit,
     update_user_language,
 )
 
@@ -306,6 +307,8 @@ class SubscriptionMiddleware(BaseMiddleware):
         bot = data.get("bot")
         if not user or not bot or not REQUIRED_CHANNEL_ID:
             return await handler(event, data)
+
+        await record_bot_visit(user.id)
 
         if isinstance(event, CallbackQuery) and event.data == "subscription:check":
             return await handler(event, data)

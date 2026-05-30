@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Boxes,
+  BarChart3,
   Check,
   ClipboardList,
   Database,
@@ -24,6 +25,11 @@ type Stats = {
   users: number;
   orders: number;
   links: number;
+};
+
+type VisitPoint = {
+  visit_date: string;
+  visits: number;
 };
 
 type Order = {
@@ -89,6 +95,13 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatChartDate(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(new Date(value));
+}
+
 function App() {
   const [login, setLogin] = useState(localStorage.getItem('admin_login') || 'admin');
   const [password, setPassword] = useState(localStorage.getItem('admin_password') || '');
@@ -96,6 +109,7 @@ function App() {
   const [theme, setTheme] = useState(localStorage.getItem('admin_theme') || 'light');
   const [tab, setTab] = useState<Tab>('orders');
   const [stats, setStats] = useState<Stats>({ users: 0, orders: 0, links: 0 });
+  const [visits, setVisits] = useState<VisitPoint[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<StoreUser[]>([]);
   const [links, setLinks] = useState<StoreLink[]>([]);
@@ -129,14 +143,16 @@ function App() {
     setLoading(true);
     setMessage('');
     try {
-      const [nextStats, nextOrders, nextUsers, nextLinks, nextProduct] = await Promise.all([
+      const [nextStats, nextVisits, nextOrders, nextUsers, nextLinks, nextProduct] = await Promise.all([
         request<Stats>('/api/stats'),
+        request<VisitPoint[]>('/api/visits?days=14'),
         request<Order[]>('/api/orders'),
         request<StoreUser[]>('/api/users'),
         request<StoreLink[]>('/api/links'),
         request<Product>('/api/product'),
       ]);
       setStats(nextStats);
+      setVisits(nextVisits);
       setOrders(nextOrders);
       setUsers(nextUsers);
       setLinks(nextLinks);
@@ -227,6 +243,8 @@ function App() {
     setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
   }
 
+  const maxVisits = Math.max(...visits.map((point) => point.visits), 1);
+
   if (!isAuthed) {
     return (
       <main className="login-screen">
@@ -296,6 +314,27 @@ function App() {
           <Boxes size={20} />
           <span>Ссылки</span>
           <strong>{stats.links}</strong>
+        </div>
+      </section>
+
+      <section className="panel visits-panel">
+        <div className="panel-heading">
+          <h2>
+            <BarChart3 size={20} />
+            Уникальные посещения
+          </h2>
+          <span className="muted-label">за 14 дней</span>
+        </div>
+        <div className="visits-chart" aria-label="График уникальных посещений бота по дням">
+          {visits.map((point) => (
+            <div className="visit-bar" key={point.visit_date}>
+              <strong>{point.visits}</strong>
+              <div className="bar-track">
+                <span style={{ height: `${Math.max((point.visits / maxVisits) * 100, point.visits ? 8 : 0)}%` }} />
+              </div>
+              <small>{formatChartDate(point.visit_date)}</small>
+            </div>
+          ))}
         </div>
       </section>
 

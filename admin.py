@@ -17,6 +17,7 @@ from db import (
     add_links,
     admin_stats,
     complete_platega_payment,
+    daily_unique_visits,
     delete_available_links,
     delete_link,
     ensure_schema,
@@ -143,6 +144,12 @@ async def platega_webhook(
 @app.get("/api/stats")
 async def stats(_: str = Depends(check_auth)) -> dict:
     return await admin_stats()
+
+
+@app.get("/api/visits")
+async def visits(days: int = 14, _: str = Depends(check_auth)) -> list[dict]:
+    safe_days = max(1, min(days, 60))
+    return [clean_row(row) for row in await daily_unique_visits(safe_days)]
 
 
 @app.get("/api/orders")

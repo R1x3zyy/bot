@@ -100,6 +100,13 @@ async def ensure_schema() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
 
+            CREATE TABLE IF NOT EXISTS bot_visits (
+                visit_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                user_id BIGINT NOT NULL,
+                first_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (visit_date, user_id)
+            );
+
             CREATE TABLE IF NOT EXISTS platega_payments (
                 id BIGSERIAL PRIMARY KEY,
                 user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -171,6 +178,41 @@ async def update_user_language(user_id: int, language: str) -> dict | None:
             "UPDATE users SET language = %s WHERE id = %s RETURNING *",
             (language, user_id),
         ).fetchone()
+
+
+async def record_bot_visit(user_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO bot_visits (visit_date, user_id)
+            VALUES (CURRENT_DATE, %s)
+            ON CONFLICT (visit_date, user_id) DO NOTHING
+            """,
+            (user_id,),
+        )
+
+
+async def daily_unique_visits(days: int = 14) -> list[dict]:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            WITH dates AS (
+                SELECT generate_series(
+                    CURRENT_DATE - (%s::int - 1),
+                    CURRENT_DATE,
+                    INTERVAL '1 day'
+                )::date AS visit_date
+            )
+            SELECT
+                dates.visit_date,
+                COALESCE(count(bot_visits.user_id), 0)::int AS visits
+            FROM dates
+            LEFT JOIN bot_visits ON bot_visits.visit_date = dates.visit_date
+            GROUP BY dates.visit_date
+            ORDER BY dates.visit_date
+            """,
+            (days,),
+        ).fetchall()
 
 
 async def add_links(links: list[str]) -> int:
