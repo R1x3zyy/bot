@@ -371,6 +371,28 @@ td small {
   overflow: auto;
 }
 
+.link-summary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 12px;
+}
+
+.link-summary span {
+  background: var(--panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.link-summary strong {
+  color: var(--text);
+  font-size: 22px;
+}
+
 .link-row {
   align-items: center;
   background: var(--panel-soft);

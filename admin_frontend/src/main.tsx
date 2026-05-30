@@ -61,6 +61,12 @@ type StoreLink = {
   created_at: string;
 };
 
+type LinksSummary = {
+  total: number;
+  available: number;
+  issued: number;
+};
+
 type Product = {
   code: string;
   title: string;
@@ -113,6 +119,7 @@ function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<StoreUser[]>([]);
   const [links, setLinks] = useState<StoreLink[]>([]);
+  const [linksSummary, setLinksSummary] = useState<LinksSummary>({ total: 0, available: 0, issued: 0 });
   const [product, setProduct] = useState<Product | null>(null);
   const [newLinks, setNewLinks] = useState('');
   const [message, setMessage] = useState('');
@@ -143,12 +150,13 @@ function App() {
     setLoading(true);
     setMessage('');
     try {
-      const [nextStats, nextVisits, nextOrders, nextUsers, nextLinks, nextProduct] = await Promise.all([
+      const [nextStats, nextVisits, nextOrders, nextUsers, nextLinks, nextLinksSummary, nextProduct] = await Promise.all([
         request<Stats>('/api/stats'),
         request<VisitPoint[]>('/api/visits?days=14'),
         request<Order[]>('/api/orders'),
         request<StoreUser[]>('/api/users'),
         request<StoreLink[]>('/api/links'),
+        request<LinksSummary>('/api/links/summary'),
         request<Product>('/api/product'),
       ]);
       setStats(nextStats);
@@ -156,6 +164,7 @@ function App() {
       setOrders(nextOrders);
       setUsers(nextUsers);
       setLinks(nextLinks);
+      setLinksSummary(nextLinksSummary);
       setProduct(nextProduct);
       localStorage.setItem('admin_login', login);
       localStorage.setItem('admin_password', password);
@@ -428,6 +437,20 @@ function App() {
                 <Trash2 size={18} />
                 Очистить невыданные
               </button>
+            </div>
+            <div className="link-summary">
+              <span>
+                Всего
+                <strong>{linksSummary.total}</strong>
+              </span>
+              <span>
+                В наличии
+                <strong>{linksSummary.available}</strong>
+              </span>
+              <span>
+                Выдано
+                <strong>{linksSummary.issued}</strong>
+              </span>
             </div>
             <div className="link-list">
               {links.map((link) => (

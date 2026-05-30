@@ -179,6 +179,14 @@ async def links(_: str = Depends(check_auth)) -> list[dict]:
     return [clean_row(link) for link in await list_links(200)]
 
 
+@app.get("/api/links/summary")
+async def links_summary(_: str = Depends(check_auth)) -> dict:
+    rows = await list_links(10000)
+    total = len(rows)
+    issued = sum(1 for row in rows if row["is_issued"])
+    return {"total": total, "available": total - issued, "issued": issued}
+
+
 @app.post("/api/links")
 async def create_links(payload: LinksPayload, _: str = Depends(check_auth)) -> dict:
     added = await add_links(payload.links.splitlines())
