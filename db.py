@@ -99,6 +99,17 @@ async def ensure_schema() -> None:
                 comment TEXT NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
+
+            CREATE TABLE IF NOT EXISTS platega_payments (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                transaction_id TEXT NOT NULL UNIQUE,
+                purpose TEXT NOT NULL,
+                amount_rub NUMERIC(12, 2) NOT NULL,
+                status TEXT NOT NULL DEFAULT 'PENDING',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                paid_at TIMESTAMPTZ
+            );
             """
         )
         conn.execute(
@@ -448,6 +459,59 @@ async def create_review(user_id: int, order_id: int, rating: int, comment: str) 
 async def get_transactions(user_id: int) -> list[dict]:
     with get_conn() as conn:
         return conn.execute("SELECT * FROM transactions WHERE user_id = %s ORDER BY created_at", (user_id,)).fetchall()
+
+
+async def create_platega_payment(user_id: int, transaction_id: str, purpose: str, amount_rub: int) -> dict:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            INSERT INTO platega_payments (user_id, transaction_id, purpose, amount_rub)
+            VALUES (%s, %s, %s, %s)
+            RETURNING *
+            """,
+            (user_id, transaction_id, purpose, amount_rub),
+        ).fetchone()
+
+
+async def get_platega_payment(payment_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM platega_payments WHERE id = %s", (payment_id,)).fetchone()
+
+
+async def complete_platega_payment(payment_id: int, status: str = "CONFIRMED") -> dict | None:
+    with get_conn() as conn:
+        payment = conn.execute(
+            "SELECT * FROM platega_payments WHERE id = %s FOR UPDATE",
+            (payment_id,),
+        ).fetchone()
+        if not payment:
+            return None
+        if payment["status"] == "CONFIRMED":
+            return payment
+
+        if payment["purpose"] == "topup":
+            conn.execute(
+                "UPDATE users SET balance = balance + %s WHERE id = %s",
+                (payment["amount_rub"], payment["user_id"]),
+            )
+            conn.execute(
+                """
+                INSERT INTO transactions (user_id, type, amount, description)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (payment["user_id"], "topup", payment["amount_rub"], "Platega top-up"),
+            )
+
+        return conn.execute(
+            """
+            UPDATE platega_payments
+            SET status = %s,
+                paid_at = now()
+            WHERE id = %s
+            RETURNING *
+            """,
+            (status, payment_id),
+        ).fetchone()
 
 
 async def admin_stats() -> dict:

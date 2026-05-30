@@ -26,14 +26,17 @@ from dotenv import load_dotenv
 from db import (
     add_links,
     admin_stats,
+    complete_platega_payment,
     complete_crypto_payment,
     count_available_links,
     create_balance_order,
     create_crypto_payment,
+    create_platega_payment,
     create_review,
     ensure_schema,
     ensure_user,
     get_crypto_payment,
+    get_platega_payment,
     get_product_config,
     get_transactions,
     get_user,
@@ -54,6 +57,9 @@ REQUIRED_CHANNEL_ID = os.getenv("REQUIRED_CHANNEL_ID", "@r1x3zyyshop")
 REQUIRED_CHANNEL_URL = os.getenv("REQUIRED_CHANNEL_URL", "https://t.me/r1x3zyyshop")
 CRYPTOBOT_TOKEN = os.getenv("CRYPTOBOT_TOKEN")
 CRYPTOBOT_API_URL = os.getenv("CRYPTOBOT_API_URL", "https://pay.crypt.bot/api")
+PLATEGA_MERCHANT_ID = os.getenv("PLATEGA_MERCHANT_ID")
+PLATEGA_SECRET = os.getenv("PLATEGA_SECRET")
+PLATEGA_API_URL = os.getenv("PLATEGA_API_URL", "https://app.platega.io")
 PRODUCT_CODE = "gemini_link_18_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
@@ -156,6 +162,50 @@ async def get_cryptobot_invoice(invoice_id: int) -> dict | None:
         items = result.get("items") or result.get("invoices") or []
         return items[0] if items else None
     return None
+
+
+async def platega_request(method: str, path: str, payload: dict | None = None) -> dict:
+    if not PLATEGA_MERCHANT_ID or not PLATEGA_SECRET:
+        raise RuntimeError("PLATEGA_MERCHANT_ID or PLATEGA_SECRET is not set")
+
+    url = f"{PLATEGA_API_URL.rstrip('/')}/{path.lstrip('/')}"
+    headers = {
+        "X-MerchantId": PLATEGA_MERCHANT_ID,
+        "X-Secret": PLATEGA_SECRET,
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(headers=headers) as session:
+        if method == "GET":
+            async with session.get(url) as response:
+                data = await response.json(content_type=None)
+        else:
+            async with session.post(url, json=payload or {}) as response:
+                data = await response.json(content_type=None)
+
+    if isinstance(data, dict) and (data.get("error") or data.get("statusCode", 200) >= 400):
+        raise RuntimeError(str(data.get("message") or data.get("error") or data))
+    return data
+
+
+async def create_platega_invoice(amount_rub: int, description: str, payload: str) -> dict:
+    return await platega_request(
+        "POST",
+        "v2/transaction/process",
+        {
+            "paymentDetails": {
+                "amount": amount_rub,
+                "currency": "RUB",
+            },
+            "description": description[:255],
+            "return": REQUIRED_CHANNEL_URL,
+            "failedUrl": REQUIRED_CHANNEL_URL,
+            "payload": payload,
+        },
+    )
+
+
+async def get_platega_transaction(transaction_id: str) -> dict:
+    return await platega_request("GET", f"transaction/{transaction_id}")
 
 
 class OrderState(StatesGroup):
@@ -410,6 +460,17 @@ def cryptobot_invoice_keyboard(payment_id: int, invoice_url: str, lang: str = "r
         inline_keyboard=[
             [InlineKeyboardButton(text=pay_text, url=invoice_url)],
             [InlineKeyboardButton(text=check_text, callback_data=f"cryptobot:check:{payment_id}")],
+        ]
+    )
+
+
+def platega_invoice_keyboard(payment_id: int, payment_url: str, lang: str = "ru") -> InlineKeyboardMarkup:
+    pay_text = "💵 Pay Platega" if lang == "en" else "💵 Оплатить Platega"
+    check_text = "✅ Check payment" if lang == "en" else "✅ Проверить оплату"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=pay_text, url=payment_url)],
+            [InlineKeyboardButton(text=check_text, callback_data=f"platega:check:{payment_id}")],
         ]
     )
 
@@ -796,6 +857,31 @@ async def send_cryptobot_invoice(
         "Оплатите счет, затем нажмите <b>Проверить оплату</b>."
     )
     await message.answer(text, reply_markup=cryptobot_invoice_keyboard(payment["id"], invoice_url, lang))
+
+
+async def send_platega_invoice(message: Message, user_id: int, amount_rub: int, lang: str) -> None:
+    invoice = await create_platega_invoice(amount_rub, f"Пополнение баланса на {amount_rub} RUB", f"topup:{user_id}:{amount_rub}")
+    transaction_id = invoice.get("transactionId") or invoice.get("id")
+    payment_url = invoice.get("url") or invoice.get("redirect")
+    if not transaction_id or not payment_url:
+        raise RuntimeError("Platega transaction id or payment URL is missing")
+
+    payment = await create_platega_payment(
+        user_id=user_id,
+        transaction_id=str(transaction_id),
+        purpose="topup",
+        amount_rub=amount_rub,
+    )
+    text = (
+        f"{ce('news_money')} <b>Platega invoice</b>\n\n"
+        f"Amount: <b>{amount_rub} ₽</b>\n\n"
+        "Pay the invoice, then press <b>Check payment</b>."
+        if lang == "en"
+        else f"{ce('news_money')} <b>Счет Platega</b>\n\n"
+        f"Сумма: <b>{amount_rub} ₽</b>\n\n"
+        "Оплатите счет, затем нажмите <b>Проверить оплату</b>."
+    )
+    await message.answer(text, reply_markup=platega_invoice_keyboard(payment["id"], payment_url, lang))
 
 
 def delivery_text(links: list[dict], lang: str = "ru") -> str:
@@ -1418,6 +1504,27 @@ async def topup_method_placeholder(callback: CallbackQuery, state: FSMContext) -
     data = await state.get_data()
     amount = int(data.get("topup_amount", 0))
     method = callback.data.split(":")[-1]
+    if method == "platega":
+        if amount <= 0:
+            await callback.message.answer(
+                "Send the top-up amount again." if lang == "en" else "Отправьте сумму пополнения еще раз."
+            )
+            await callback.answer()
+            return
+        try:
+            await send_platega_invoice(callback.message, callback.from_user.id, amount, lang)
+            await state.clear()
+        except Exception:
+            logging.exception("Could not create Platega top-up invoice")
+            text = (
+                "Could not create Platega invoice. Please try again later."
+                if lang == "en"
+                else "Не удалось создать счет Platega. Попробуйте позже."
+            )
+            await callback.message.answer(text)
+        await callback.answer()
+        return
+
     if method == "cryptobot":
         if amount <= 0:
             await callback.message.answer(
@@ -1470,6 +1577,54 @@ async def cancel_topup(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     text = "Top-up cancelled." if lang == "en" else "Пополнение отменено."
     await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("platega:check:"))
+async def check_platega_payment(callback: CallbackQuery) -> None:
+    lang = await get_lang(callback.from_user.id)
+    payment_id = int(callback.data.split(":")[-1])
+    payment = await get_platega_payment(payment_id)
+    if not payment or payment["user_id"] != callback.from_user.id:
+        await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
+        return
+
+    if payment["status"] == "CONFIRMED":
+        text = (
+            f"{ce('ok')} This payment has already been credited."
+            if lang == "en"
+            else f"{ce('ok')} Этот платеж уже был зачислен."
+        )
+        await callback.message.answer(text)
+        await callback.answer()
+        return
+
+    try:
+        transaction = await get_platega_transaction(str(payment["transaction_id"]))
+    except Exception:
+        logging.exception("Could not check Platega transaction")
+        await callback.answer(
+            "Could not check payment. Try again later." if lang == "en" else "Не удалось проверить оплату. Попробуйте позже.",
+            show_alert=True,
+        )
+        return
+
+    status = str(transaction.get("status", "")).upper()
+    if status != "CONFIRMED":
+        await callback.answer("Payment has not arrived yet." if lang == "en" else "Оплата еще не поступила.", show_alert=True)
+        return
+
+    completed = await complete_platega_payment(payment_id, status)
+    if not completed:
+        await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
+        return
+
+    text = (
+        f"{ce('ok')} Balance topped up by <b>{int(completed['amount_rub'])} ₽</b>."
+        if lang == "en"
+        else f"{ce('ok')} Баланс пополнен на <b>{int(completed['amount_rub'])} ₽</b>."
+    )
+    await callback.message.answer(text, reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
