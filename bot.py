@@ -14,6 +14,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     BotCommand,
+    BotCommandScopeChat,
+    BotCommandScopeDefault,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -2520,9 +2522,21 @@ async def main() -> None:
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="Открыть магазин"),
-            BotCommand(command="daystats", description="Статистика за день"),
-        ]
+        ],
+        scope=BotCommandScopeDefault(),
     )
+    if ADMIN_ID and ADMIN_ID.isdigit():
+        await bot.set_my_commands(
+            [
+                BotCommand(command="start", description="Открыть магазин"),
+                BotCommand(command="stock", description="Остаток ссылок"),
+                BotCommand(command="stats", description="Статистика бота"),
+                BotCommand(command="daystats", description="Статистика за день"),
+                BotCommand(command="addlinks", description="Добавить ссылки"),
+                BotCommand(command="broadcast", description="Рассылка"),
+            ],
+            scope=BotCommandScopeChat(chat_id=int(ADMIN_ID)),
+        )
 
     dispatcher = Dispatcher()
     dispatcher.message.middleware(SubscriptionMiddleware())
