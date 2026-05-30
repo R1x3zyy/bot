@@ -519,17 +519,30 @@ def help_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 
 
 def misc_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
-    back_text = "🔙 Back" if lang == "en" else "🔙 Назад"
+    if lang == "en":
+        support_text = "💬 Support"
+        channel_text = "📣 Our channel"
+        reviews_text = "✏️ Reviews"
+        privacy_text = "🛡 Privacy policy"
+        terms_text = "⚙️ User agreement"
+        back_text = "🔙 Back"
+    else:
+        support_text = "💬 Тех поддержка"
+        channel_text = "📣 Наш канал"
+        reviews_text = "✏️ Отзывы"
+        privacy_text = "🛡 Политика конфид."
+        terms_text = "⚙️ Польз. соглашение"
+        back_text = "🔙 Назад"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Тех поддержка", url="https://t.me/R1x3zyy")],
+            [InlineKeyboardButton(text=support_text, url="https://t.me/R1x3zyy")],
             [
-                InlineKeyboardButton(text="📣 Наш канал", url="https://t.me/r1x3zyyshop"),
-                InlineKeyboardButton(text="✏️ Отзывы", callback_data="misc:reviews"),
+                InlineKeyboardButton(text=channel_text, url="https://t.me/r1x3zyyshop"),
+                InlineKeyboardButton(text=reviews_text, callback_data="misc:reviews"),
             ],
             [InlineKeyboardButton(text="❓ FAQ", callback_data="misc:faq")],
-            [InlineKeyboardButton(text="🛡 Политика конфид.", callback_data="misc:privacy")],
-            [InlineKeyboardButton(text="⚙️ Польз. соглашение", callback_data="misc:terms")],
+            [InlineKeyboardButton(text=privacy_text, callback_data="misc:privacy")],
+            [InlineKeyboardButton(text=terms_text, callback_data="misc:terms")],
             [InlineKeyboardButton(text=back_text, callback_data="menu:home")],
         ]
     )
