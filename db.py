@@ -13,6 +13,8 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/gemini_store")
 URL_RE = re.compile(r"https?://\S+")
+PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "1.50"))
+REPORT_TZ = os.getenv("REPORT_TZ", "Europe/Moscow")
 
 
 @contextmanager
@@ -668,6 +670,54 @@ async def admin_stats() -> dict:
         orders = conn.execute("SELECT count(*) AS count FROM orders").fetchone()["count"]
         links = conn.execute("SELECT count(*) AS count FROM links WHERE is_issued = FALSE").fetchone()["count"]
     return {"users": users, "orders": orders, "links": links}
+
+
+async def daily_business_stats() -> dict:
+    with get_conn() as conn:
+        product = await get_product_config()
+        row = conn.execute(
+            """
+            WITH today AS (
+                SELECT (now() AT TIME ZONE %s)::date AS day
+            )
+            SELECT
+                today.day,
+                COALESCE(count(orders.id), 0)::int AS orders_count,
+                COALESCE(sum(orders.price_rub), 0) AS revenue_rub
+            FROM today
+            LEFT JOIN orders
+                ON (orders.created_at AT TIME ZONE %s)::date = today.day
+                AND orders.status <> 'Отменен'
+            GROUP BY today.day
+            """,
+            (REPORT_TZ, REPORT_TZ),
+        ).fetchone()
+        issued_links = conn.execute(
+            """
+            SELECT count(*)::int AS count
+            FROM links
+            WHERE is_issued = TRUE
+                AND issued_at IS NOT NULL
+                AND (issued_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
+            """,
+            (REPORT_TZ, REPORT_TZ),
+        ).fetchone()["count"]
+
+    price_usd = Decimal(product["price_usd"])
+    revenue_usd = price_usd * issued_links
+    cost_usd = PRODUCT_COST_USD * issued_links
+    profit_usd = revenue_usd - cost_usd
+    return {
+        "date": row["day"],
+        "orders_count": row["orders_count"],
+        "revenue_rub": row["revenue_rub"],
+        "issued_links": issued_links,
+        "price_usd": price_usd,
+        "cost_per_link_usd": PRODUCT_COST_USD,
+        "revenue_usd": revenue_usd,
+        "cost_usd": cost_usd,
+        "profit_usd": profit_usd,
+    }
 
 
 async def recent_orders(limit: int = 20) -> list[dict]:

@@ -21,6 +21,7 @@ from db import (
     complete_crypto_payment,
     complete_platega_payment,
     daily_unique_visits,
+    daily_business_stats,
     delete_available_links,
     delete_link,
     ensure_schema,
@@ -195,6 +196,11 @@ async def cryptobot_webhook(
 @app.get("/api/stats")
 async def stats(_: str = Depends(check_auth)) -> dict:
     return await admin_stats()
+
+
+@app.get("/api/business/day")
+async def business_day(_: str = Depends(check_auth)) -> dict:
+    return clean_row(await daily_business_stats())
 
 
 @app.get("/api/visits")

@@ -32,6 +32,7 @@ from db import (
     create_balance_order,
     create_crypto_payment,
     create_platega_payment,
+    daily_business_stats,
     create_review,
     ensure_schema,
     ensure_user,
@@ -1279,6 +1280,27 @@ async def stats(message: Message) -> None:
     )
 
 
+@router.message(Command("daystats"))
+async def day_stats(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    data = await daily_business_stats()
+    await message.answer(
+        f"{ce('chart')} <b>Статистика за день</b>\n\n"
+        f"Дата: <b>{data['date']}</b>\n"
+        f"Заказов: <b>{data['orders_count']}</b>\n"
+        f"Оборот: <b>{int(data['revenue_rub'])} ₽</b>\n"
+        f"Выдано ссылок: <b>{data['issued_links']}</b>\n\n"
+        f"Цена продажи: <b>{data['price_usd']}$</b>\n"
+        f"Закуп за 1 ссылку: <b>{data['cost_per_link_usd']}$</b>\n"
+        f"Оборот в $ по выданным: <b>{data['revenue_usd']}$</b>\n"
+        f"Закуп всего: <b>{data['cost_usd']}$</b>\n"
+        f"Прибыль: <b>{data['profit_usd']}$</b>"
+    )
+
+
 @router.message(Command("addlinks"))
 async def add_links_command(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id):
@@ -2498,6 +2520,7 @@ async def main() -> None:
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="Открыть магазин"),
+            BotCommand(command="daystats", description="Статистика за день"),
         ]
     )
 

@@ -27,6 +27,18 @@ type Stats = {
   links: number;
 };
 
+type BusinessDay = {
+  date: string;
+  orders_count: number;
+  revenue_rub: number;
+  issued_links: number;
+  price_usd: number;
+  cost_per_link_usd: number;
+  revenue_usd: number;
+  cost_usd: number;
+  profit_usd: number;
+};
+
 type VisitPoint = {
   visit_date: string;
   visits: number;
@@ -115,6 +127,7 @@ function App() {
   const [theme, setTheme] = useState(localStorage.getItem('admin_theme') || 'light');
   const [tab, setTab] = useState<Tab>('orders');
   const [stats, setStats] = useState<Stats>({ users: 0, orders: 0, links: 0 });
+  const [businessDay, setBusinessDay] = useState<BusinessDay | null>(null);
   const [visits, setVisits] = useState<VisitPoint[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<StoreUser[]>([]);
@@ -150,8 +163,9 @@ function App() {
     setLoading(true);
     setMessage('');
     try {
-      const [nextStats, nextVisits, nextOrders, nextUsers, nextLinks, nextLinksSummary, nextProduct] = await Promise.all([
+      const [nextStats, nextBusinessDay, nextVisits, nextOrders, nextUsers, nextLinks, nextLinksSummary, nextProduct] = await Promise.all([
         request<Stats>('/api/stats'),
+        request<BusinessDay>('/api/business/day'),
         request<VisitPoint[]>('/api/visits?days=14'),
         request<Order[]>('/api/orders'),
         request<StoreUser[]>('/api/users'),
@@ -160,6 +174,7 @@ function App() {
         request<Product>('/api/product'),
       ]);
       setStats(nextStats);
+      setBusinessDay(nextBusinessDay);
       setVisits(nextVisits);
       setOrders(nextOrders);
       setUsers(nextUsers);
@@ -325,6 +340,39 @@ function App() {
           <strong>{stats.links}</strong>
         </div>
       </section>
+
+      {businessDay && (
+        <section className="panel finance-panel">
+          <div className="panel-heading">
+            <h2>
+              <BarChart3 size={20} />
+              Финансы за день
+            </h2>
+            <span className="muted-label">{businessDay.date}</span>
+          </div>
+          <div className="finance-grid">
+            <span>
+              Оборот
+              <strong>{Number(businessDay.revenue_rub).toFixed(0)} ₽</strong>
+            </span>
+            <span>
+              Заказов
+              <strong>{businessDay.orders_count}</strong>
+            </span>
+            <span>
+              Выдано ссылок
+              <strong>{businessDay.issued_links}</strong>
+            </span>
+            <span>
+              Прибыль
+              <strong>${Number(businessDay.profit_usd).toFixed(2)}</strong>
+            </span>
+          </div>
+          <p className="finance-note">
+            Закуп: ${Number(businessDay.cost_per_link_usd).toFixed(2)} за ссылку. Цена продажи из настроек товара: ${Number(businessDay.price_usd).toFixed(2)}.
+          </p>
+        </section>
+      )}
 
       <section className="panel visits-panel">
         <div className="panel-heading">

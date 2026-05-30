@@ -281,6 +281,38 @@ label {
   margin-bottom: 16px;
 }
 
+.finance-panel {
+  margin-bottom: 16px;
+}
+
+.finance-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.finance-grid span {
+  background: var(--panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.finance-grid strong {
+  color: var(--text);
+  font-size: 24px;
+}
+
+.finance-note {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  margin: 12px 0 0;
+}
+
 .visits-chart {
   align-items: end;
   display: grid;
@@ -443,6 +475,10 @@ td small {
   }
 
   .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-grid {
     grid-template-columns: 1fr;
   }
 
