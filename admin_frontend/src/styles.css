@@ -228,6 +228,27 @@ label {
   color: var(--accent);
 }
 
+.subtabs {
+  background: var(--tabs-bg);
+  border-radius: 8px;
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+}
+
+.subtabs button {
+  background: transparent;
+  color: var(--text-soft);
+  flex: 1;
+  justify-content: center;
+}
+
+.subtabs button.active {
+  background: var(--panel);
+  color: var(--accent);
+}
+
 .message {
   background: var(--message-bg);
   border: 1px solid var(--message-border);
@@ -283,6 +304,11 @@ label {
 
 .channel-panel {
   margin-bottom: 16px;
+}
+
+.channel-section {
+  display: grid;
+  gap: 0;
 }
 
 .channel-summary {
@@ -513,6 +539,7 @@ td small {
   .topbar,
   .panel-heading,
   .tabs,
+  .subtabs,
   .split,
   .form-row,
   .product-row {
@@ -532,7 +559,8 @@ td small {
     grid-template-columns: 1fr;
   }
 
-  .tabs button {
+  .tabs button,
+  .subtabs button {
     justify-content: flex-start;
   }
 }

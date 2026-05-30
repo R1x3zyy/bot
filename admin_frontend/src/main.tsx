@@ -109,6 +109,7 @@ type Product = {
 };
 
 type Tab = 'orders' | 'links' | 'product' | 'users';
+type UsersSubtab = 'list' | 'leaves';
 
 const ORDER_STATUSES = [
   'Ожидает обработки',
@@ -147,6 +148,7 @@ function App() {
   const [isAuthed, setIsAuthed] = useState(Boolean(localStorage.getItem('admin_password')));
   const [theme, setTheme] = useState(localStorage.getItem('admin_theme') || 'light');
   const [tab, setTab] = useState<Tab>('orders');
+  const [usersSubtab, setUsersSubtab] = useState<UsersSubtab>('list');
   const [stats, setStats] = useState<Stats>({ users: 0, orders: 0, links: 0 });
   const [businessDay, setBusinessDay] = useState<BusinessDay | null>(null);
   const [visits, setVisits] = useState<VisitPoint[]>([]);
@@ -420,61 +422,6 @@ function App() {
         </div>
       </section>
 
-      {channelLeaves && (
-        <section className="panel channel-panel">
-          <div className="panel-heading">
-            <h2>
-              <Users size={20} />
-              Отписки от канала
-            </h2>
-            <span className="muted-label">за 14 дней</span>
-          </div>
-          <div className="channel-summary">
-            <span>
-              Сегодня
-              <strong>{channelLeaves.today_leaves}</strong>
-            </span>
-            <span>
-              Всего
-              <strong>{channelLeaves.total_leaves}</strong>
-            </span>
-          </div>
-          <div className="leaves-chart" aria-label="График отписок от канала по дням">
-            {channelLeaves.chart.map((point) => (
-              <div className="visit-bar" key={point.event_date}>
-                <strong>{point.leaves}</strong>
-                <div className="bar-track danger-track">
-                  <span style={{ height: `${Math.max((point.leaves / maxLeaves) * 100, point.leaves ? 8 : 0)}%` }} />
-                </div>
-                <small>{formatChartDate(point.event_date)}</small>
-              </div>
-            ))}
-          </div>
-          <div className="table-wrap compact-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Username</th>
-                  <th>Имя</th>
-                  <th>Дата выхода</th>
-                </tr>
-              </thead>
-              <tbody>
-                {channelLeaves.recent.map((user) => (
-                  <tr key={`${user.user_id}-${user.created_at}`}>
-                    <td>{user.user_id}</td>
-                    <td>{user.username || '-'}</td>
-                    <td>{user.first_name || '-'}</td>
-                    <td>{formatDate(user.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
       <nav className="tabs">
         <button className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>
           <ClipboardList size={18} />
@@ -650,32 +597,107 @@ function App() {
       {tab === 'users' && (
         <section className="panel">
           <h2>Пользователи</h2>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Username</th>
-                  <th>Имя</th>
-                  <th>Баланс</th>
-                  <th>Реф. код</th>
-                  <th>Дата</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td>{user.id}</td>
-                    <td>{user.username || '-'}</td>
-                    <td>{user.first_name || '-'}</td>
-                    <td>{Number(user.balance).toFixed(0)} ₽</td>
-                    <td>{user.ref_code}</td>
-                    <td>{formatDate(user.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="subtabs">
+            <button
+              type="button"
+              className={usersSubtab === 'list' ? 'active' : ''}
+              onClick={() => setUsersSubtab('list')}
+            >
+              <Users size={18} />
+              Пользователи
+            </button>
+            <button
+              type="button"
+              className={usersSubtab === 'leaves' ? 'active' : ''}
+              onClick={() => setUsersSubtab('leaves')}
+            >
+              <LogOut size={18} />
+              Отписки
+            </button>
           </div>
+          {usersSubtab === 'list' && (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Имя</th>
+                    <th>Баланс</th>
+                    <th>Реф. код</th>
+                    <th>Дата</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.id}</td>
+                      <td>{user.username || '-'}</td>
+                      <td>{user.first_name || '-'}</td>
+                      <td>{Number(user.balance).toFixed(0)} ₽</td>
+                      <td>{user.ref_code}</td>
+                      <td>{formatDate(user.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {usersSubtab === 'leaves' && channelLeaves && (
+            <div className="channel-section">
+              <div className="panel-heading">
+                <h2>
+                  <LogOut size={20} />
+                  Отписки от канала
+                </h2>
+                <span className="muted-label">за 14 дней</span>
+              </div>
+              <div className="channel-summary">
+                <span>
+                  Сегодня
+                  <strong>{channelLeaves.today_leaves}</strong>
+                </span>
+                <span>
+                  Всего
+                  <strong>{channelLeaves.total_leaves}</strong>
+                </span>
+              </div>
+              <div className="leaves-chart" aria-label="График отписок от канала по дням">
+                {channelLeaves.chart.map((point) => (
+                  <div className="visit-bar" key={point.event_date}>
+                    <strong>{point.leaves}</strong>
+                    <div className="bar-track danger-track">
+                      <span style={{ height: `${Math.max((point.leaves / maxLeaves) * 100, point.leaves ? 8 : 0)}%` }} />
+                    </div>
+                    <small>{formatChartDate(point.event_date)}</small>
+                  </div>
+                ))}
+              </div>
+              <div className="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Username</th>
+                      <th>Имя</th>
+                      <th>Дата выхода</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {channelLeaves.recent.map((user) => (
+                      <tr key={`${user.user_id}-${user.created_at}`}>
+                        <td>{user.user_id}</td>
+                        <td>{user.username || '-'}</td>
+                        <td>{user.first_name || '-'}</td>
+                        <td>{formatDate(user.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
       )}
     </main>
