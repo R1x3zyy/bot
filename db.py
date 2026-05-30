@@ -109,6 +109,17 @@ async def ensure_schema() -> None:
                 PRIMARY KEY (visit_date, user_id)
             );
 
+            CREATE TABLE IF NOT EXISTS channel_membership_events (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                username TEXT NOT NULL DEFAULT '',
+                first_name TEXT NOT NULL DEFAULT '',
+                event_type TEXT NOT NULL,
+                old_status TEXT NOT NULL DEFAULT '',
+                new_status TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+
             CREATE TABLE IF NOT EXISTS platega_payments (
                 id BIGSERIAL PRIMARY KEY,
                 user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -215,6 +226,83 @@ async def daily_unique_visits(days: int = 14) -> list[dict]:
             """,
             (days,),
         ).fetchall()
+
+
+async def record_channel_membership_event(
+    user_id: int,
+    username: str | None,
+    first_name: str | None,
+    event_type: str,
+    old_status: str,
+    new_status: str,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO channel_membership_events (
+                user_id, username, first_name, event_type, old_status, new_status
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (user_id, username or "", first_name or "", event_type, old_status, new_status),
+        )
+
+
+async def channel_leave_stats(days: int = 14, limit: int = 50) -> dict:
+    with get_conn() as conn:
+        today_leaves = conn.execute(
+            """
+            SELECT count(*)::int AS count
+            FROM channel_membership_events
+            WHERE event_type = 'left'
+                AND (created_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
+            """,
+            (REPORT_TZ, REPORT_TZ),
+        ).fetchone()["count"]
+        total_leaves = conn.execute(
+            """
+            SELECT count(*)::int AS count
+            FROM channel_membership_events
+            WHERE event_type = 'left'
+            """,
+        ).fetchone()["count"]
+        chart = conn.execute(
+            """
+            WITH dates AS (
+                SELECT generate_series(
+                    CURRENT_DATE - (%s::int - 1),
+                    CURRENT_DATE,
+                    INTERVAL '1 day'
+                )::date AS event_date
+            )
+            SELECT
+                dates.event_date,
+                COALESCE(count(events.id), 0)::int AS leaves
+            FROM dates
+            LEFT JOIN channel_membership_events AS events
+                ON events.event_type = 'left'
+                AND (events.created_at AT TIME ZONE %s)::date = dates.event_date
+            GROUP BY dates.event_date
+            ORDER BY dates.event_date
+            """,
+            (days, REPORT_TZ),
+        ).fetchall()
+        recent = conn.execute(
+            """
+            SELECT user_id, username, first_name, old_status, new_status, created_at
+            FROM channel_membership_events
+            WHERE event_type = 'left'
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+    return {
+        "today_leaves": today_leaves,
+        "total_leaves": total_leaves,
+        "chart": chart,
+        "recent": recent,
+    }
 
 
 async def add_links(links: list[str]) -> int:

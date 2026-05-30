@@ -281,6 +281,52 @@ label {
   margin-bottom: 16px;
 }
 
+.channel-panel {
+  margin-bottom: 16px;
+}
+
+.channel-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, 1fr);
+  margin-bottom: 12px;
+}
+
+.channel-summary span {
+  background: var(--panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.channel-summary strong {
+  color: var(--text);
+  font-size: 24px;
+}
+
+.leaves-chart {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(14, minmax(38px, 1fr));
+  min-height: 180px;
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.danger-track span {
+  background: linear-gradient(180deg, #fb7185, #e11d48);
+}
+
+.compact-table {
+  margin-top: 12px;
+  max-height: 320px;
+  overflow: auto;
+}
+
 .finance-panel {
   margin-bottom: 16px;
 }
@@ -479,6 +525,10 @@ td small {
   }
 
   .finance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .channel-summary {
     grid-template-columns: 1fr;
   }
 

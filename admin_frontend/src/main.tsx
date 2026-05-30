@@ -44,6 +44,27 @@ type VisitPoint = {
   visits: number;
 };
 
+type ChannelLeavePoint = {
+  event_date: string;
+  leaves: number;
+};
+
+type ChannelLeaveUser = {
+  user_id: number;
+  username: string;
+  first_name: string;
+  old_status: string;
+  new_status: string;
+  created_at: string;
+};
+
+type ChannelLeaves = {
+  today_leaves: number;
+  total_leaves: number;
+  chart: ChannelLeavePoint[];
+  recent: ChannelLeaveUser[];
+};
+
 type Order = {
   id: number;
   user_id: number;
@@ -129,6 +150,7 @@ function App() {
   const [stats, setStats] = useState<Stats>({ users: 0, orders: 0, links: 0 });
   const [businessDay, setBusinessDay] = useState<BusinessDay | null>(null);
   const [visits, setVisits] = useState<VisitPoint[]>([]);
+  const [channelLeaves, setChannelLeaves] = useState<ChannelLeaves | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<StoreUser[]>([]);
   const [links, setLinks] = useState<StoreLink[]>([]);
@@ -163,10 +185,11 @@ function App() {
     setLoading(true);
     setMessage('');
     try {
-      const [nextStats, nextBusinessDay, nextVisits, nextOrders, nextUsers, nextLinks, nextLinksSummary, nextProduct] = await Promise.all([
+      const [nextStats, nextBusinessDay, nextVisits, nextChannelLeaves, nextOrders, nextUsers, nextLinks, nextLinksSummary, nextProduct] = await Promise.all([
         request<Stats>('/api/stats'),
         request<BusinessDay>('/api/business/day'),
         request<VisitPoint[]>('/api/visits?days=14'),
+        request<ChannelLeaves>('/api/channel/leaves?days=14'),
         request<Order[]>('/api/orders'),
         request<StoreUser[]>('/api/users'),
         request<StoreLink[]>('/api/links'),
@@ -176,6 +199,7 @@ function App() {
       setStats(nextStats);
       setBusinessDay(nextBusinessDay);
       setVisits(nextVisits);
+      setChannelLeaves(nextChannelLeaves);
       setOrders(nextOrders);
       setUsers(nextUsers);
       setLinks(nextLinks);
@@ -268,6 +292,7 @@ function App() {
   }
 
   const maxVisits = Math.max(...visits.map((point) => point.visits), 1);
+  const maxLeaves = Math.max(...(channelLeaves?.chart.map((point) => point.leaves) || []), 1);
 
   if (!isAuthed) {
     return (
@@ -394,6 +419,61 @@ function App() {
           ))}
         </div>
       </section>
+
+      {channelLeaves && (
+        <section className="panel channel-panel">
+          <div className="panel-heading">
+            <h2>
+              <Users size={20} />
+              Отписки от канала
+            </h2>
+            <span className="muted-label">за 14 дней</span>
+          </div>
+          <div className="channel-summary">
+            <span>
+              Сегодня
+              <strong>{channelLeaves.today_leaves}</strong>
+            </span>
+            <span>
+              Всего
+              <strong>{channelLeaves.total_leaves}</strong>
+            </span>
+          </div>
+          <div className="leaves-chart" aria-label="График отписок от канала по дням">
+            {channelLeaves.chart.map((point) => (
+              <div className="visit-bar" key={point.event_date}>
+                <strong>{point.leaves}</strong>
+                <div className="bar-track danger-track">
+                  <span style={{ height: `${Math.max((point.leaves / maxLeaves) * 100, point.leaves ? 8 : 0)}%` }} />
+                </div>
+                <small>{formatChartDate(point.event_date)}</small>
+              </div>
+            ))}
+          </div>
+          <div className="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Username</th>
+                  <th>Имя</th>
+                  <th>Дата выхода</th>
+                </tr>
+              </thead>
+              <tbody>
+                {channelLeaves.recent.map((user) => (
+                  <tr key={`${user.user_id}-${user.created_at}`}>
+                    <td>{user.user_id}</td>
+                    <td>{user.username || '-'}</td>
+                    <td>{user.first_name || '-'}</td>
+                    <td>{formatDate(user.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <nav className="tabs">
         <button className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>

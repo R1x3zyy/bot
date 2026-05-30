@@ -20,6 +20,7 @@ from db import (
     admin_stats,
     complete_crypto_payment,
     complete_platega_payment,
+    channel_leave_stats,
     daily_unique_visits,
     daily_business_stats,
     delete_available_links,
@@ -207,6 +208,18 @@ async def business_day(_: str = Depends(check_auth)) -> dict:
 async def visits(days: int = 14, _: str = Depends(check_auth)) -> list[dict]:
     safe_days = max(1, min(days, 60))
     return [clean_row(row) for row in await daily_unique_visits(safe_days)]
+
+
+@app.get("/api/channel/leaves")
+async def channel_leaves(days: int = 14, _: str = Depends(check_auth)) -> dict:
+    safe_days = max(1, min(days, 60))
+    data = await channel_leave_stats(safe_days, 50)
+    return {
+        "today_leaves": data["today_leaves"],
+        "total_leaves": data["total_leaves"],
+        "chart": [clean_row(row) for row in data["chart"]],
+        "recent": [clean_row(row) for row in data["recent"]],
+    }
 
 
 @app.get("/api/orders")

@@ -17,6 +17,7 @@ from aiogram.types import (
     BotCommandScopeChat,
     BotCommandScopeDefault,
     CallbackQuery,
+    ChatMemberUpdated,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
@@ -48,6 +49,7 @@ from db import (
     list_active_crypto_payments,
     list_pending_platega_payments,
     list_users,
+    record_channel_membership_event,
     record_bot_visit,
     update_user_language,
 )
@@ -249,6 +251,19 @@ router = Router()
 
 def is_admin(user_id: int) -> bool:
     return bool(ADMIN_ID and ADMIN_ID.isdigit() and int(ADMIN_ID) == user_id)
+
+
+def status_value(status: object) -> str:
+    return str(getattr(status, "value", status))
+
+
+def is_required_channel(chat: object) -> bool:
+    if not REQUIRED_CHANNEL_ID:
+        return False
+    required = REQUIRED_CHANNEL_ID.lower()
+    username = (getattr(chat, "username", None) or "").lower()
+    chat_id = str(getattr(chat, "id", ""))
+    return required in {chat_id, f"@{username}"}
 
 
 def subscription_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
@@ -1251,6 +1266,40 @@ async def start(message: Message) -> None:
     except Exception:
         logging.exception("Could not delete reply keyboard cleanup message")
     await message.answer(await home_text(lang, display_user_name(message.from_user)), reply_markup=start_keyboard(lang))
+
+
+@router.chat_member()
+async def track_required_channel_member(event: ChatMemberUpdated) -> None:
+    if not is_required_channel(event.chat):
+        return
+
+    user = event.new_chat_member.user
+    if user.is_bot:
+        return
+
+    old_status = status_value(event.old_chat_member.status)
+    new_status = status_value(event.new_chat_member.status)
+    if old_status == new_status:
+        return
+
+    inactive = {"left", "kicked"}
+    event_type = ""
+    if new_status in inactive and old_status not in inactive:
+        event_type = "left"
+    elif old_status in inactive and new_status not in inactive:
+        event_type = "joined"
+
+    if not event_type:
+        return
+
+    await record_channel_membership_event(
+        user_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        event_type=event_type,
+        old_status=old_status,
+        new_status=new_status,
+    )
 
 
 @router.callback_query(F.data == "subscription:check")
