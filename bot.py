@@ -217,6 +217,7 @@ class OrderState(StatesGroup):
 
 class BulkOrderState(StatesGroup):
     waiting_for_quantity = State()
+    waiting_for_payment = State()
     waiting_for_contact = State()
 
 
@@ -1190,6 +1191,38 @@ async def process_balance_quantity_order(
     await message.answer(done_text, reply_markup=start_keyboard(lang))
 
 
+async def show_payment_methods_for_quantity(message: Message, state: FSMContext, quantity: int, lang: str) -> None:
+    stock = await count_available_links()
+    if quantity <= 0:
+        text = "Quantity must be at least 1." if lang == "en" else "Количество должно быть от 1."
+        await message.answer(text, reply_markup=quantity_keyboard(lang))
+        return
+
+    if stock and quantity > stock:
+        text = (
+            f"Only <b>{stock}</b> pcs are available now. Choose a smaller quantity."
+            if lang == "en"
+            else f"Сейчас в наличии только <b>{stock}</b> шт. Выберите количество поменьше."
+        )
+        await message.answer(text, reply_markup=quantity_keyboard(lang))
+        return
+
+    product = await get_product_config(PRODUCT_CODE)
+    total = int(product["price_rub"]) * quantity
+    await state.update_data(bulk_quantity=quantity)
+    await state.set_state(BulkOrderState.waiting_for_payment)
+    text = (
+        f"{ce('news_money')} Choose how to pay for the order.\n\n"
+        f"Quantity: <b>{quantity}</b>\n"
+        f"Amount: <b>{total} ₽</b>"
+        if lang == "en"
+        else f"{ce('news_money')} Выберите способ оплаты заказа.\n\n"
+        f"Количество: <b>{quantity}</b>\n"
+        f"Сумма: <b>{total} ₽</b>"
+    )
+    await message.answer(text, reply_markup=bulk_payment_keyboard(quantity, lang))
+
+
 @router.message(CommandStart())
 async def start(message: Message) -> None:
     user = await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
@@ -1920,9 +1953,10 @@ async def start_bulk_order(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("buy:qty:"))
-async def select_quantity(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+async def select_quantity(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = await get_lang(callback.from_user.id)
     quantity = int(callback.data.split(":")[-1])
-    await process_balance_quantity_order(callback.message, state, bot, quantity)
+    await show_payment_methods_for_quantity(callback.message, state, quantity, lang)
     await callback.answer()
 
 
@@ -1955,7 +1989,7 @@ async def receive_bulk_quantity(message: Message, state: FSMContext, bot: Bot) -
         return
 
     quantity = int(raw_quantity)
-    await process_balance_quantity_order(message, state, bot, quantity)
+    await show_payment_methods_for_quantity(message, state, quantity, lang)
 
 
 @router.callback_query(F.data.startswith("bulk:pay:"))
@@ -2049,11 +2083,24 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
     balance = int(user["balance"])
     if balance < total:
         missing = total - balance
-        await state.set_state(TopUpState.waiting_for_amount)
-        await state.update_data(topup_amount=missing)
+        await state.update_data(bulk_quantity=quantity)
+        await state.set_state(BulkOrderState.waiting_for_payment)
+        text = (
+            f"{ce('news_money')} Not enough balance to pay from balance.\n\n"
+            f"Balance: <b>{balance} ₽</b>\n"
+            f"Order amount: <b>{total} ₽</b>\n"
+            f"Missing: <b>{missing} ₽</b>\n\n"
+            "To buy the link now, choose <b>Platega</b> or <b>Crypto</b> below."
+            if lang == "en"
+            else f"{ce('news_money')} На балансе не хватает денег для оплаты балансом.\n\n"
+            f"Баланс: <b>{balance} ₽</b>\n"
+            f"Сумма заказа: <b>{total} ₽</b>\n"
+            f"Не хватает: <b>{missing} ₽</b>\n\n"
+            "Чтобы купить ссылку сейчас, выберите ниже <b>Platega</b> или <b>Crypto</b>."
+        )
         await callback.message.answer(
-            balance_topup_text(balance, total, lang),
-            reply_markup=topup_payment_keyboard(missing, lang),
+            text,
+            reply_markup=bulk_payment_keyboard(quantity, lang),
         )
         await callback.answer()
         return
