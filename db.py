@@ -692,6 +692,15 @@ async def daily_business_stats() -> dict:
             """,
             (REPORT_TZ, REPORT_TZ),
         ).fetchone()
+        orders = conn.execute(
+            """
+            SELECT price_rub
+            FROM orders
+            WHERE (created_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
+                AND status <> 'Отменен'
+            """,
+            (REPORT_TZ, REPORT_TZ),
+        ).fetchall()
         issued_links = conn.execute(
             """
             SELECT count(*)::int AS count
@@ -704,7 +713,12 @@ async def daily_business_stats() -> dict:
         ).fetchone()["count"]
 
     price_usd = Decimal(product["price_usd"])
-    revenue_usd = price_usd * issued_links
+    price_rub = Decimal(product["price_rub"])
+    revenue_usd = Decimal("0")
+    if price_rub > 0:
+        for order in orders:
+            quantity = Decimal(order["price_rub"]) / price_rub
+            revenue_usd += quantity * price_usd
     cost_usd = PRODUCT_COST_USD * issued_links
     profit_usd = revenue_usd - cost_usd
     return {
