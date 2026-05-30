@@ -499,6 +499,27 @@ async def get_platega_payment(payment_id: int) -> dict | None:
         return conn.execute("SELECT * FROM platega_payments WHERE id = %s", (payment_id,)).fetchone()
 
 
+async def get_platega_payment_by_transaction(transaction_id: str) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM platega_payments WHERE transaction_id = %s",
+            (transaction_id,),
+        ).fetchone()
+
+
+async def update_platega_payment_status(transaction_id: str, status: str) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            UPDATE platega_payments
+            SET status = %s
+            WHERE transaction_id = %s AND status <> 'CONFIRMED'
+            RETURNING *
+            """,
+            (status, transaction_id),
+        ).fetchone()
+
+
 async def list_active_crypto_payments(limit: int = 50) -> list[dict]:
     with get_conn() as conn:
         return conn.execute(
