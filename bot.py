@@ -42,6 +42,8 @@ from db import (
     get_user,
     get_user_orders,
     issue_links_to_order,
+    list_active_crypto_payments,
+    list_pending_platega_payments,
     list_users,
     update_user_language,
 )
@@ -859,8 +861,23 @@ async def send_cryptobot_invoice(
     await message.answer(text, reply_markup=cryptobot_invoice_keyboard(payment["id"], invoice_url, lang))
 
 
-async def send_platega_invoice(message: Message, user_id: int, amount_rub: int, lang: str) -> None:
-    invoice = await create_platega_invoice(amount_rub, f"Пополнение баланса на {amount_rub} RUB", f"topup:{user_id}:{amount_rub}")
+async def send_platega_invoice(
+    message: Message,
+    user_id: int,
+    amount_rub: int,
+    purpose: str,
+    lang: str,
+    product_code: str = "",
+    product_title: str = "",
+    quantity: int = 0,
+    contact: str = "",
+) -> None:
+    description = (
+        f"Balance top-up: {amount_rub} RUB"
+        if purpose == "topup"
+        else f"{product_title} - {quantity or 1} pcs"
+    )
+    invoice = await create_platega_invoice(amount_rub, description, f"{purpose}:{user_id}:{amount_rub}")
     transaction_id = invoice.get("transactionId") or invoice.get("id")
     payment_url = invoice.get("url") or invoice.get("redirect")
     if not transaction_id or not payment_url:
@@ -869,8 +886,12 @@ async def send_platega_invoice(message: Message, user_id: int, amount_rub: int, 
     payment = await create_platega_payment(
         user_id=user_id,
         transaction_id=str(transaction_id),
-        purpose="topup",
+        purpose=purpose,
         amount_rub=amount_rub,
+        product_code=product_code,
+        product_title=product_title,
+        quantity=quantity,
+        contact=contact,
     )
     text = (
         f"{ce('news_money')} <b>Platega invoice</b>\n\n"
@@ -926,6 +947,124 @@ async def deliver_order_links(message: Message, order_id: int, user_id: int, qua
     else:
         await message.answer(reserved_text(lang))
     return links
+
+
+async def deliver_order_links_to_user(bot: Bot, chat_id: int, order_id: int, quantity: int, lang: str) -> list[dict]:
+    links = await issue_links_to_order(order_id, chat_id, quantity, "Выдан автоматически")
+    if links is None:
+        return []
+    if links:
+        await bot.send_message(chat_id, delivery_text(links, lang))
+        review_text = (
+            f"{ce('news_pencil')} How was your purchase? You can leave a review."
+            if lang == "en"
+            else f"{ce('news_pencil')} Как прошла покупка? Можете оставить отзыв."
+        )
+        await bot.send_message(chat_id, review_text, reply_markup=review_prompt_keyboard(order_id, lang))
+    else:
+        await bot.send_message(chat_id, reserved_text(lang))
+    return links
+
+
+async def payment_username(user_id: int) -> str:
+    user = await get_user(user_id)
+    username = user["username"] if user else ""
+    if username:
+        return f"@{username}"
+    return "username не указан"
+
+
+async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
+    lang = await get_lang(int(payment["user_id"]))
+    amount = int(payment["amount_rub"])
+    if payment["purpose"] == "topup":
+        text = (
+            f"{ce('ok')} Balance topped up by <b>{amount} ₽</b>."
+            if lang == "en"
+            else f"{ce('ok')} Баланс пополнен на <b>{amount} ₽</b>."
+        )
+        await bot.send_message(int(payment["user_id"]), text, reply_markup=start_keyboard(lang))
+        return
+
+    quantity = int(payment["quantity"] or 1)
+    issued_links = []
+    if payment["order_id"]:
+        issued_links = await deliver_order_links_to_user(
+            bot,
+            int(payment["user_id"]),
+            int(payment["order_id"]),
+            quantity,
+            lang,
+        )
+
+    text = (
+        f"{ce('ok')} Payment received. Order created and is visible in My purchases."
+        if lang == "en"
+        else f"{ce('ok')} Оплата получена. Заказ создан и появился в разделе «Мои покупки»."
+    )
+    if issued_links:
+        text = (
+            f"{ce('ok')} Payment received. Order created and delivered."
+            if lang == "en"
+            else f"{ce('ok')} Оплата получена. Заказ создан и выдан."
+        )
+    await bot.send_message(int(payment["user_id"]), text, reply_markup=start_keyboard(lang))
+
+    if ADMIN_ID:
+        username = await payment_username(int(payment["user_id"]))
+        admin_message = (
+            f"{ce('cart')} <b>Новый заказ {provider}</b>\n\n"
+            f"Товар: {payment['product_title']}\n"
+            f"Выдано ссылок: {len(issued_links)}\n"
+            f"Сумма: {amount} ₽\n"
+            f"Оплата: {provider}\n"
+            f"Покупатель: {username}\n"
+            f"ID: <code>{payment['user_id']}</code>\n"
+            f"Контакт: {payment['contact']}"
+        )
+        try:
+            await bot.send_message(int(ADMIN_ID), admin_message)
+        except ValueError:
+            logging.exception("ADMIN_ID must be a number")
+        except Exception:
+            logging.exception("Could not send paid order to admin")
+
+
+async def auto_payment_watcher(bot: Bot) -> None:
+    while True:
+        try:
+            for payment in await list_active_crypto_payments():
+                try:
+                    invoice = await get_cryptobot_invoice(int(payment["invoice_id"]))
+                    if not invoice or invoice.get("status") != "paid":
+                        continue
+                    username = await payment_username(int(payment["user_id"]))
+                    completed = await complete_crypto_payment(
+                        int(payment["id"]),
+                        username,
+                        "Оплачен Crypto Bot, ожидает обработки",
+                    )
+                    if completed:
+                        await notify_paid_payment(bot, completed, "Crypto Bot")
+                except Exception:
+                    logging.exception("Could not auto-check Crypto Bot payment %s", payment.get("id"))
+
+            for payment in await list_pending_platega_payments():
+                try:
+                    transaction = await get_platega_transaction(str(payment["transaction_id"]))
+                    status = str(transaction.get("status", "")).upper()
+                    if status != "CONFIRMED":
+                        continue
+                    username = await payment_username(int(payment["user_id"]))
+                    completed = await complete_platega_payment(int(payment["id"]), username, status)
+                    if completed:
+                        await notify_paid_payment(bot, completed, "Platega")
+                except Exception:
+                    logging.exception("Could not auto-check Platega payment %s", payment.get("id"))
+        except Exception:
+            logging.exception("Payment watcher failed")
+
+        await asyncio.sleep(15)
 
 
 async def quantity_text(lang: str = "ru") -> str:
@@ -1512,7 +1651,7 @@ async def topup_method_placeholder(callback: CallbackQuery, state: FSMContext) -
             await callback.answer()
             return
         try:
-            await send_platega_invoice(callback.message, callback.from_user.id, amount, lang)
+            await send_platega_invoice(callback.message, callback.from_user.id, amount, "topup", lang)
             await state.clear()
         except Exception:
             logging.exception("Could not create Platega top-up invoice")
@@ -1581,7 +1720,7 @@ async def cancel_topup(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("platega:check:"))
-async def check_platega_payment(callback: CallbackQuery) -> None:
+async def check_platega_payment(callback: CallbackQuery, bot: Bot) -> None:
     lang = await get_lang(callback.from_user.id)
     payment_id = int(callback.data.split(":")[-1])
     payment = await get_platega_payment(payment_id)
@@ -1614,10 +1753,15 @@ async def check_platega_payment(callback: CallbackQuery) -> None:
         await callback.answer("Payment has not arrived yet." if lang == "en" else "Оплата еще не поступила.", show_alert=True)
         return
 
-    completed = await complete_platega_payment(payment_id, status)
+    username = await payment_username(callback.from_user.id)
+    completed = await complete_platega_payment(payment_id, username, status)
     if not completed:
         await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
         return
+
+    await notify_paid_payment(bot, completed, "Platega")
+    await callback.answer()
+    return
 
     text = (
         f"{ce('ok')} Balance topped up by <b>{int(completed['amount_rub'])} ₽</b>."
@@ -1840,25 +1984,38 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
     if method != "balance":
         product = await get_product_config(PRODUCT_CODE)
         total = int(product["price_rub"]) * quantity
-        if method == "cryptobot":
+        if method in {"cryptobot", "platega"}:
             await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
             contact = f"@{callback.from_user.username}" if callback.from_user.username else f"id:{callback.from_user.id}"
             title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
             try:
-                await send_cryptobot_invoice(
-                    callback.message,
-                    callback.from_user.id,
-                    total,
-                    "bulk_order",
-                    lang,
-                    product_code=PRODUCT_CODE,
-                    product_title=title,
-                    quantity=quantity,
-                    contact=contact,
-                )
+                if method == "cryptobot":
+                    await send_cryptobot_invoice(
+                        callback.message,
+                        callback.from_user.id,
+                        total,
+                        "bulk_order",
+                        lang,
+                        product_code=PRODUCT_CODE,
+                        product_title=title,
+                        quantity=quantity,
+                        contact=contact,
+                    )
+                else:
+                    await send_platega_invoice(
+                        callback.message,
+                        callback.from_user.id,
+                        total,
+                        "bulk_order",
+                        lang,
+                        product_code=PRODUCT_CODE,
+                        product_title=title,
+                        quantity=quantity,
+                        contact=contact,
+                    )
                 await state.clear()
             except Exception:
-                logging.exception("Could not create Crypto Bot bulk invoice")
+                logging.exception("Could not create %s bulk invoice", method)
                 text = (
                     "Could not create Crypto Bot invoice. Please try again later."
                     if lang == "en"
@@ -2299,6 +2456,7 @@ async def main() -> None:
     dispatcher.callback_query.middleware(SubscriptionMiddleware())
     dispatcher.include_router(router)
 
+    asyncio.create_task(auto_payment_watcher(bot))
     await dispatcher.start_polling(bot)
 
 

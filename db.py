@@ -107,11 +107,21 @@ async def ensure_schema() -> None:
                 purpose TEXT NOT NULL,
                 amount_rub NUMERIC(12, 2) NOT NULL,
                 status TEXT NOT NULL DEFAULT 'PENDING',
+                product_code TEXT NOT NULL DEFAULT '',
+                product_title TEXT NOT NULL DEFAULT '',
+                quantity INTEGER NOT NULL DEFAULT 0,
+                contact TEXT NOT NULL DEFAULT '',
+                order_id BIGINT REFERENCES orders(id) ON DELETE SET NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 paid_at TIMESTAMPTZ
             );
             """
         )
+        conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS product_code TEXT NOT NULL DEFAULT ''")
+        conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS product_title TEXT NOT NULL DEFAULT ''")
+        conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS contact TEXT NOT NULL DEFAULT ''")
+        conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS order_id BIGINT REFERENCES orders(id) ON DELETE SET NULL")
         conn.execute(
             """
             INSERT INTO product_settings (code, title, price_rub, price_usd, description)
@@ -367,7 +377,7 @@ async def complete_crypto_payment(payment_id: int, username: str, order_status: 
         if not payment:
             return None
         if payment["status"] == "paid":
-            return payment
+            return None
 
         order_id = None
         if payment["purpose"] == "topup":
@@ -461,15 +471,26 @@ async def get_transactions(user_id: int) -> list[dict]:
         return conn.execute("SELECT * FROM transactions WHERE user_id = %s ORDER BY created_at", (user_id,)).fetchall()
 
 
-async def create_platega_payment(user_id: int, transaction_id: str, purpose: str, amount_rub: int) -> dict:
+async def create_platega_payment(
+    user_id: int,
+    transaction_id: str,
+    purpose: str,
+    amount_rub: int,
+    product_code: str = "",
+    product_title: str = "",
+    quantity: int = 0,
+    contact: str = "",
+) -> dict:
     with get_conn() as conn:
         return conn.execute(
             """
-            INSERT INTO platega_payments (user_id, transaction_id, purpose, amount_rub)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO platega_payments (
+                user_id, transaction_id, purpose, amount_rub, product_code, product_title, quantity, contact
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (user_id, transaction_id, purpose, amount_rub),
+            (user_id, transaction_id, purpose, amount_rub, product_code, product_title, quantity, contact),
         ).fetchone()
 
 
@@ -478,7 +499,35 @@ async def get_platega_payment(payment_id: int) -> dict | None:
         return conn.execute("SELECT * FROM platega_payments WHERE id = %s", (payment_id,)).fetchone()
 
 
-async def complete_platega_payment(payment_id: int, status: str = "CONFIRMED") -> dict | None:
+async def list_active_crypto_payments(limit: int = 50) -> list[dict]:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT *
+            FROM crypto_payments
+            WHERE status <> 'paid'
+            ORDER BY created_at
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+
+
+async def list_pending_platega_payments(limit: int = 50) -> list[dict]:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT *
+            FROM platega_payments
+            WHERE status <> 'CONFIRMED'
+            ORDER BY created_at
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+
+
+async def complete_platega_payment(payment_id: int, username: str = "", status: str = "CONFIRMED") -> dict | None:
     with get_conn() as conn:
         payment = conn.execute(
             "SELECT * FROM platega_payments WHERE id = %s FOR UPDATE",
@@ -487,7 +536,7 @@ async def complete_platega_payment(payment_id: int, status: str = "CONFIRMED") -
         if not payment:
             return None
         if payment["status"] == "CONFIRMED":
-            return payment
+            return None
 
         if payment["purpose"] == "topup":
             conn.execute(
@@ -501,16 +550,44 @@ async def complete_platega_payment(payment_id: int, status: str = "CONFIRMED") -
                 """,
                 (payment["user_id"], "topup", payment["amount_rub"], "Platega top-up"),
             )
+        elif payment["purpose"] in {"order", "bulk_order"}:
+            order = conn.execute(
+                """
+                INSERT INTO orders (user_id, username, product_code, product_title, price_rub, contact, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (
+                    payment["user_id"],
+                    username,
+                    payment["product_code"],
+                    payment["product_title"],
+                    payment["amount_rub"],
+                    payment["contact"],
+                    "Оплачен Platega, ожидает обработки",
+                ),
+            ).fetchone()
+            order_id = order["id"]
+            conn.execute(
+                """
+                INSERT INTO transactions (user_id, type, amount, description)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (payment["user_id"], "platega_payment", payment["amount_rub"], f"Platega: {payment['product_title']}"),
+            )
+        else:
+            order_id = payment["order_id"]
 
         return conn.execute(
             """
             UPDATE platega_payments
             SET status = %s,
-                paid_at = now()
+                paid_at = now(),
+                order_id = COALESCE(%s, order_id)
             WHERE id = %s
             RETURNING *
             """,
-            (status, payment_id),
+            (status, order_id if "order_id" in locals() else None, payment_id),
         ).fetchone()
 
 
