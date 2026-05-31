@@ -20,6 +20,7 @@ from aiogram.types import (
     BufferedInputFile,
     CallbackQuery,
     ChatMemberUpdated,
+    FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
@@ -72,8 +73,11 @@ PLATEGA_MERCHANT_ID = os.getenv("PLATEGA_MERCHANT_ID")
 PLATEGA_SECRET = os.getenv("PLATEGA_SECRET")
 PLATEGA_API_URL = os.getenv("PLATEGA_API_URL", "https://app.platega.io")
 PRODUCT_CODE = "gemini_link_18_month"
+GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
+GEMINI_ACCOUNT_PRODUCT_CODE = "gemini_account_12_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
+PROFILE_BANNER_PATH = os.path.join(os.path.dirname(__file__), "assets", "profile_banner.png")
 CE = {
     "gemini": ("5321197740800120767", "🤖"),
     "shop": ("5309801015015405183", "🎁"),
@@ -117,6 +121,12 @@ def product_icon(product_code: str) -> str:
     if "gpt" in product_code:
         return ce("shop")
     return ce("gemini")
+
+
+async def send_profile_banner(message: Message, caption: str | None = None) -> None:
+    if not os.path.exists(PROFILE_BANNER_PATH):
+        return
+    await message.answer_photo(FSInputFile(PROFILE_BANNER_PATH), caption=caption)
 
 
 def format_usd(value: Decimal) -> str:
@@ -1337,6 +1347,7 @@ async def start(message: Message) -> None:
         await cleanup.delete()
     except Exception:
         logging.exception("Could not delete reply keyboard cleanup message")
+    await send_profile_banner(message)
     await message.answer(await home_text(lang, display_user_name(message.from_user)), reply_markup=start_keyboard(lang))
 
 
@@ -1449,6 +1460,7 @@ async def add_links_command(message: Message, state: FSMContext) -> None:
     links = [line.strip() for line in raw_text.splitlines()[1:] if line.strip()]
     if not links:
         await state.set_state(AdminState.waiting_for_links)
+        await state.update_data(add_product_code=PRODUCT_CODE, add_item_name="ссылок")
         await message.answer(
             "Отправьте ссылки следующим сообщением или сразу после команды:\n\n"
             "/addlinks\n"
@@ -1460,10 +1472,63 @@ async def add_links_command(message: Message, state: FSMContext) -> None:
         )
         return
 
-    added = await add_links(links)
+    added = await add_links(links, PRODUCT_CODE)
     await message.answer(
         f"Добавлено ссылок: <b>{added}</b>\n"
-        f"Теперь в наличии: <b>{await count_available_links()}</b>"
+        f"Теперь в наличии: <b>{await count_available_links(PRODUCT_CODE)}</b>"
+    )
+
+
+async def add_accounts_command(
+    message: Message,
+    state: FSMContext,
+    product_code: str,
+    item_name: str,
+    example: str,
+) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Добавлять аккаунты может только администратор. Узнать ID: /myid")
+        return
+
+    raw_text = message.text or ""
+    accounts = [line.strip() for line in raw_text.splitlines()[1:] if line.strip()]
+    if not accounts:
+        await state.set_state(AdminState.waiting_for_links)
+        await state.update_data(add_product_code=product_code, add_item_name=item_name)
+        await message.answer(
+            f"Отправьте {item_name} следующим сообщением или сразу после команды:\n\n"
+            f"{message.text.split()[0]}\n"
+            f"{example}\n"
+            f"{example.replace('1@', '2@')}"
+        )
+        return
+
+    added = await add_links(accounts, product_code)
+    await message.answer(
+        f"Добавлено {item_name}: <b>{added}</b>\n"
+        f"Теперь в наличии: <b>{await count_available_links(product_code)}</b>"
+    )
+
+
+@router.message(Command("addgptaccounts"))
+async def add_gpt_accounts_command(message: Message, state: FSMContext) -> None:
+    await add_accounts_command(
+        message,
+        state,
+        GPT_ACCOUNT_PRODUCT_CODE,
+        "GPT-аккаунтов",
+        "mail1@gmail.com:password",
+    )
+
+
+@router.message(Command("addgeminiaccounts"))
+async def add_gemini_accounts_command(message: Message, state: FSMContext) -> None:
+    await add_accounts_command(
+        message,
+        state,
+        GEMINI_ACCOUNT_PRODUCT_CODE,
+        "Gemini-аккаунтов",
+        "mail1@gmail.com:password",
     )
 
 
@@ -1561,21 +1626,24 @@ async def add_links_from_next_message(message: Message, state: FSMContext) -> No
         await message.answer("Добавлять ссылки может только администратор. Узнать ID: /myid")
         return
 
-    links = (message.text or "").splitlines()
-    added = await add_links(links)
+    data = await state.get_data()
+    product_code = data.get("add_product_code") or PRODUCT_CODE
+    item_name = data.get("add_item_name") or "позиций"
+    items = (message.text or "").splitlines()
+    added = await add_links(items, product_code)
     await state.clear()
 
     if not added:
         await message.answer(
-            "Я не нашел ссылок в сообщении. Отправьте строки вида:\n\n"
-            "976 https://example.com/link-1\n"
-            "977 https://example.com/link-2"
+            "Я не нашел товарных позиций в сообщении. Отправьте каждую позицию с новой строки:\n\n"
+            "mail@gmail.com:password\n"
+            "https://example.com/link"
         )
         return
 
     await message.answer(
-        f"Добавлено ссылок: <b>{added}</b>\n"
-        f"Теперь в наличии: <b>{await count_available_links()}</b>"
+        f"Добавлено {item_name}: <b>{added}</b>\n"
+        f"Теперь в наличии: <b>{await count_available_links(product_code)}</b>"
     )
 
 
@@ -1757,7 +1825,8 @@ async def cancel_review(callback: CallbackQuery, state: FSMContext) -> None:
 async def open_home(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(await home_text(lang, display_user_name(callback.from_user)), reply_markup=start_keyboard(lang))
+    await send_profile_banner(callback.message)
+    await callback.message.answer(await home_text(lang, display_user_name(callback.from_user)), reply_markup=start_keyboard(lang))
     await callback.answer()
 
 
@@ -1783,7 +1852,8 @@ async def open_profile(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(await profile_text(callback.from_user.id, lang), reply_markup=profile_keyboard(lang))
+    await send_profile_banner(callback.message)
+    await callback.message.answer(await profile_text(callback.from_user.id, lang), reply_markup=profile_keyboard(lang))
     await callback.answer()
 
 
@@ -2683,6 +2753,8 @@ async def main() -> None:
                 BotCommand(command="stats", description="Статистика бота"),
                 BotCommand(command="daystats", description="Статистика за день"),
                 BotCommand(command="addlinks", description="Добавить ссылки"),
+                BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),
+                BotCommand(command="addgeminiaccounts", description="Добавить Gemini аккаунты"),
                 BotCommand(command="broadcast", description="Рассылка"),
             ],
             scope=BotCommandScopeChat(chat_id=int(ADMIN_ID)),
