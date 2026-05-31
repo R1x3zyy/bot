@@ -89,6 +89,8 @@ type StoreUser = {
 type StoreLink = {
   id: number;
   url: string;
+  product_code: string;
+  purchase_cost_usd: number;
   is_issued: boolean;
   issued_to: number | null;
   created_at: string;
@@ -110,6 +112,12 @@ type Product = {
 
 type Tab = 'orders' | 'links' | 'product' | 'users';
 type UsersSubtab = 'list' | 'leaves';
+
+const PRODUCT_OPTIONS = [
+  { code: 'gemini_link_18_month', title: 'Gemini Link 18 months' },
+  { code: 'gpt_account_full_warranty', title: 'GPT account full warranty' },
+  { code: 'gemini_account_12_month', title: 'Gemini account 12 month' },
+];
 
 const ORDER_STATUSES = [
   'Ожидает обработки',
@@ -149,6 +157,8 @@ function App() {
   const [theme, setTheme] = useState(localStorage.getItem('admin_theme') || 'light');
   const [tab, setTab] = useState<Tab>('orders');
   const [usersSubtab, setUsersSubtab] = useState<UsersSubtab>('list');
+  const [linkProductCode, setLinkProductCode] = useState(PRODUCT_OPTIONS[0].code);
+  const [productCode, setProductCode] = useState(PRODUCT_OPTIONS[0].code);
   const [stats, setStats] = useState<Stats>({ users: 0, orders: 0, links: 0 });
   const [businessDay, setBusinessDay] = useState<BusinessDay | null>(null);
   const [visits, setVisits] = useState<VisitPoint[]>([]);
@@ -183,7 +193,7 @@ function App() {
     return response.json();
   }
 
-  async function loadAll() {
+  async function loadAll(nextLinkProductCode = linkProductCode, nextProductCode = productCode) {
     setLoading(true);
     setMessage('');
     try {
@@ -194,9 +204,9 @@ function App() {
         request<ChannelLeaves>('/api/channel/leaves?days=14'),
         request<Order[]>('/api/orders'),
         request<StoreUser[]>('/api/users'),
-        request<StoreLink[]>('/api/links'),
-        request<LinksSummary>('/api/links/summary'),
-        request<Product>('/api/product'),
+        request<StoreLink[]>(`/api/links?product_code=${encodeURIComponent(nextLinkProductCode)}`),
+        request<LinksSummary>(`/api/links/summary?product_code=${encodeURIComponent(nextLinkProductCode)}`),
+        request<Product>(`/api/product?code=${encodeURIComponent(nextProductCode)}`),
       ]);
       setStats(nextStats);
       setBusinessDay(nextBusinessDay);
@@ -238,7 +248,7 @@ function App() {
     event.preventDefault();
     const result = await request<{ added: number }>('/api/links', {
       method: 'POST',
-      body: JSON.stringify({ links: newLinks }),
+      body: JSON.stringify({ links: newLinks, product_code: linkProductCode }),
     });
     setNewLinks('');
     setMessage(`Добавлено ссылок: ${result.added}`);
@@ -276,7 +286,7 @@ function App() {
 
   async function clearAvailableLinks() {
     if (!window.confirm('Удалить все ссылки, которые еще не выданы?')) return;
-    const result = await request<{ deleted: number }>('/api/links/available', {
+    const result = await request<{ deleted: number }>(`/api/links/available?product_code=${encodeURIComponent(linkProductCode)}`, {
       method: 'DELETE',
     });
     setMessage(`Удалено невыданных ссылок: ${result.deleted}`);
@@ -491,13 +501,28 @@ function App() {
       {tab === 'links' && (
         <section className="split">
           <form className="panel" onSubmit={addLinkBatch}>
-            <h2>Добавить ссылки</h2>
+            <h2>Добавить товарные позиции</h2>
             <label>
-              Каждая ссылка с новой строки
+              Категория
+              <select
+                value={linkProductCode}
+                onChange={async (event) => {
+                  const nextCode = event.target.value;
+                  setLinkProductCode(nextCode);
+                  await loadAll(nextCode, productCode);
+                }}
+              >
+                {PRODUCT_OPTIONS.map((option) => (
+                  <option value={option.code} key={option.code}>{option.title}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Каждая позиция с новой строки
               <textarea
                 value={newLinks}
                 onChange={(event) => setNewLinks(event.target.value)}
-                placeholder="https://example.com/link-1&#10;https://example.com/link-2"
+                placeholder="https://example.com/link-1&#10;email:password:2FA"
               />
             </label>
             <button type="submit">
@@ -507,7 +532,7 @@ function App() {
           </form>
           <section className="panel">
             <div className="panel-heading">
-              <h2>Последние ссылки</h2>
+              <h2>Последние позиции</h2>
               <button className="danger" type="button" onClick={clearAvailableLinks}>
                 <Trash2 size={18} />
                 Очистить невыданные
@@ -531,7 +556,7 @@ function App() {
               {links.map((link) => (
                 <div className="link-row" key={link.id}>
                   <span>{link.url}</span>
-                  <strong>{link.is_issued ? 'Выдана' : 'В наличии'}</strong>
+                  <strong>{link.is_issued ? 'Выдана' : `В наличии · $${Number(link.purchase_cost_usd).toFixed(2)}`}</strong>
                   <button
                     className="danger icon-button"
                     type="button"
@@ -551,6 +576,21 @@ function App() {
       {tab === 'product' && product && (
         <form className="panel product-form" onSubmit={saveProduct}>
           <h2>Настройки товара</h2>
+          <label>
+            Категория
+            <select
+              value={productCode}
+              onChange={async (event) => {
+                const nextCode = event.target.value;
+                setProductCode(nextCode);
+                await loadAll(linkProductCode, nextCode);
+              }}
+            >
+              {PRODUCT_OPTIONS.map((option) => (
+                <option value={option.code} key={option.code}>{option.title}</option>
+              ))}
+            </select>
+          </label>
           <div className="product-row">
             <label>
               Название

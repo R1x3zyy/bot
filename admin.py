@@ -29,6 +29,7 @@ from db import (
     get_crypto_payment_by_invoice,
     get_platega_payment_by_transaction,
     get_product_config,
+    list_product_configs,
     list_links,
     list_users,
     recent_orders,
@@ -62,9 +63,11 @@ app.add_middleware(
 
 class LinksPayload(BaseModel):
     links: str
+    product_code: str = "gemini_link_18_month"
 
 
 class ProductPayload(BaseModel):
+    code: str = "gemini_link_18_month"
     title: str
     price_rub: Decimal
     price_usd: Decimal
@@ -245,13 +248,13 @@ async def users(_: str = Depends(check_auth)) -> list[dict]:
 
 
 @app.get("/api/links")
-async def links(_: str = Depends(check_auth)) -> list[dict]:
-    return [clean_row(link) for link in await list_links(200)]
+async def links(product_code: str = "gemini_link_18_month", _: str = Depends(check_auth)) -> list[dict]:
+    return [clean_row(link) for link in await list_links(200, product_code)]
 
 
 @app.get("/api/links/summary")
-async def links_summary(_: str = Depends(check_auth)) -> dict:
-    rows = await list_links(10000)
+async def links_summary(product_code: str = "gemini_link_18_month", _: str = Depends(check_auth)) -> dict:
+    rows = await list_links(10000, product_code)
     total = len(rows)
     issued = sum(1 for row in rows if row["is_issued"])
     return {"total": total, "available": total - issued, "issued": issued}
@@ -259,13 +262,13 @@ async def links_summary(_: str = Depends(check_auth)) -> dict:
 
 @app.post("/api/links")
 async def create_links(payload: LinksPayload, _: str = Depends(check_auth)) -> dict:
-    added = await add_links(payload.links.splitlines())
+    added = await add_links(payload.links.splitlines(), payload.product_code)
     return {"added": added}
 
 
 @app.delete("/api/links/available")
-async def remove_available_links(_: str = Depends(check_auth)) -> dict:
-    deleted = await delete_available_links()
+async def remove_available_links(product_code: str = "gemini_link_18_month", _: str = Depends(check_auth)) -> dict:
+    deleted = await delete_available_links(product_code)
     return {"deleted": deleted}
 
 
@@ -278,14 +281,19 @@ async def remove_link(link_id: int, _: str = Depends(check_auth)) -> dict:
 
 
 @app.get("/api/product")
-async def product(_: str = Depends(check_auth)) -> dict:
-    return clean_row(await get_product_config())
+async def product(code: str = "gemini_link_18_month", _: str = Depends(check_auth)) -> dict:
+    return clean_row(await get_product_config(code))
+
+
+@app.get("/api/products")
+async def products(_: str = Depends(check_auth)) -> list[dict]:
+    return [clean_row(product) for product in await list_product_configs()]
 
 
 @app.put("/api/product")
 async def save_product(payload: ProductPayload, _: str = Depends(check_auth)) -> dict:
     product_row = await update_product_config(
-        code="gemini_link_18_month",
+        code=payload.code.strip(),
         title=payload.title.strip(),
         price_rub=payload.price_rub,
         price_usd=payload.price_usd,

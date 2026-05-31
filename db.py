@@ -16,6 +16,7 @@ URL_RE = re.compile(r"https?://\S+")
 PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "1.50"))
 NEW_LINK_COST_USD = Decimal(os.getenv("NEW_LINK_COST_USD", "1.10"))
 REPORT_TZ = os.getenv("REPORT_TZ", "Europe/Moscow")
+DEFAULT_PRODUCT_CODE = "gemini_link_18_month"
 
 
 @contextmanager
@@ -41,6 +42,7 @@ async def ensure_schema() -> None:
             CREATE TABLE IF NOT EXISTS links (
                 id BIGSERIAL PRIMARY KEY,
                 url TEXT NOT NULL,
+                product_code TEXT NOT NULL DEFAULT 'gemini_link_18_month',
                 purchase_cost_usd NUMERIC(12, 2) NOT NULL DEFAULT 1.50,
                 is_issued BOOLEAN NOT NULL DEFAULT FALSE,
                 issued_to BIGINT REFERENCES users(id) ON DELETE SET NULL,
@@ -148,6 +150,9 @@ async def ensure_schema() -> None:
             "ALTER TABLE links ADD COLUMN IF NOT EXISTS purchase_cost_usd NUMERIC(12, 2) NOT NULL DEFAULT 1.50"
         )
         conn.execute(
+            "ALTER TABLE links ADD COLUMN IF NOT EXISTS product_code TEXT NOT NULL DEFAULT 'gemini_link_18_month'"
+        )
+        conn.execute(
             """
             INSERT INTO product_settings (code, title, price_rub, price_usd, description)
             VALUES (%s, %s, %s, %s, %s)
@@ -167,6 +172,46 @@ async def ensure_schema() -> None:
                 ),
             ),
         )
+        default_products = [
+            (
+                "gpt_account_full_warranty",
+                "GPT account full warranty",
+                Decimal("322.00"),
+                Decimal("4.50"),
+                (
+                    f"{'💰'} Цена: 4.50 USD\n"
+                    f"{'⏳'} Срок действия: 30 дней\n"
+                    f"{'🛡️'} Гарантия: полное сопровождение на 30 дней\n"
+                    f"{'📦'} Доставка: READY_ACCOUNT\n\n"
+                    "Готовый аккаунт ChatGPT Plus на 1 месяц. После оплаты вы получите данные для входа: "
+                    "email, пароль от ChatGPT и ключ 2FA.\n\n"
+                    "Аккаунты высокого качества, на Gmail-почтах. Для входа в 2FA используйте: https://totp.danhersam.com"
+                ),
+            ),
+            (
+                "gemini_account_12_month",
+                "Gemini account 12 month",
+                Decimal("250.00"),
+                Decimal("3.50"),
+                (
+                    f"{'💰'} Цена: 3.50 USD\n"
+                    f"{'⏳'} Срок действия: 12 месяцев\n"
+                    f"{'🛡️'} Гарантия: на момент выдачи и входа\n"
+                    f"{'📦'} Доставка: READY_ACCOUNT\n\n"
+                    "Готовый аккаунт Gemini с активным доступом на 12 месяцев. После оплаты выдаются данные для входа "
+                    "и вся информация, которая нужна для использования аккаунта."
+                ),
+            ),
+        ]
+        with conn.cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO product_settings (code, title, price_rub, price_usd, description)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (code) DO NOTHING
+                """,
+                default_products,
+            )
 
 
 async def ensure_user(user_id: int, username: str | None, first_name: str | None) -> dict:
@@ -310,12 +355,15 @@ async def channel_leave_stats(days: int = 14, limit: int = 50) -> dict:
     }
 
 
-async def add_links(links: list[str]) -> int:
+async def add_links(links: list[str], product_code: str = DEFAULT_PRODUCT_CODE) -> int:
     clean_links = []
     for line in links:
-        match = URL_RE.search(line.strip())
+        clean_line = line.strip()
+        match = URL_RE.search(clean_line)
         if match:
             clean_links.append(match.group(0))
+        elif clean_line:
+            clean_links.append(clean_line)
 
     if not clean_links:
         return 0
@@ -323,22 +371,25 @@ async def add_links(links: list[str]) -> int:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.executemany(
-                "INSERT INTO links (url, purchase_cost_usd) VALUES (%s, %s)",
-                [(link, NEW_LINK_COST_USD) for link in clean_links],
+                "INSERT INTO links (url, product_code, purchase_cost_usd) VALUES (%s, %s, %s)",
+                [(link, product_code, NEW_LINK_COST_USD) for link in clean_links],
             )
     return len(clean_links)
 
 
-async def list_links(limit: int = 100) -> list[dict]:
+async def list_links(limit: int = 100, product_code: str | None = None) -> list[dict]:
     with get_conn() as conn:
+        where = "WHERE product_code = %s" if product_code else ""
+        params: tuple = (product_code, limit) if product_code else (limit,)
         return conn.execute(
-            """
-            SELECT id, url, purchase_cost_usd, is_issued, issued_to, created_at, issued_at
+            f"""
+            SELECT id, url, product_code, purchase_cost_usd, is_issued, issued_to, created_at, issued_at
             FROM links
+            {where}
             ORDER BY created_at DESC
             LIMIT %s
             """,
-            (limit,),
+            params,
         ).fetchall()
 
 
@@ -347,21 +398,30 @@ async def delete_link(link_id: int) -> dict | None:
         return conn.execute("DELETE FROM links WHERE id = %s RETURNING *", (link_id,)).fetchone()
 
 
-async def delete_available_links() -> int:
+async def delete_available_links(product_code: str | None = None) -> int:
     with get_conn() as conn:
-        rows = conn.execute("DELETE FROM links WHERE is_issued = FALSE RETURNING id").fetchall()
+        if product_code:
+            rows = conn.execute(
+                "DELETE FROM links WHERE is_issued = FALSE AND product_code = %s RETURNING id",
+                (product_code,),
+            ).fetchall()
+        else:
+            rows = conn.execute("DELETE FROM links WHERE is_issued = FALSE RETURNING id").fetchall()
         return len(rows)
 
 
-async def count_available_links() -> int:
+async def count_available_links(product_code: str = DEFAULT_PRODUCT_CODE) -> int:
     with get_conn() as conn:
-        return conn.execute("SELECT count(*) AS count FROM links WHERE is_issued = FALSE").fetchone()["count"]
+        return conn.execute(
+            "SELECT count(*) AS count FROM links WHERE is_issued = FALSE AND product_code = %s",
+            (product_code,),
+        ).fetchone()["count"]
 
 
 async def issue_links_to_order(order_id: int, user_id: int, quantity: int, status: str = "Выдан") -> list[dict] | None:
     with get_conn() as conn:
         order = conn.execute(
-            "SELECT issued_link_id FROM orders WHERE id = %s FOR UPDATE",
+            "SELECT issued_link_id, product_code FROM orders WHERE id = %s FOR UPDATE",
             (order_id,),
         ).fetchone()
         if not order or order["issued_link_id"]:
@@ -372,11 +432,12 @@ async def issue_links_to_order(order_id: int, user_id: int, quantity: int, statu
             SELECT id, url
             FROM links
             WHERE is_issued = FALSE
+                AND product_code = %s
             ORDER BY id
             LIMIT %s
             FOR UPDATE SKIP LOCKED
             """,
-            (quantity,),
+            (order["product_code"], quantity),
         ).fetchall()
         if len(links) < quantity:
             conn.execute(
@@ -770,7 +831,6 @@ async def admin_stats() -> dict:
 
 async def daily_business_stats() -> dict:
     with get_conn() as conn:
-        product = await get_product_config()
         row = conn.execute(
             """
             WITH today AS (
@@ -790,10 +850,14 @@ async def daily_business_stats() -> dict:
         ).fetchone()
         orders = conn.execute(
             """
-            SELECT price_rub
+            SELECT
+                orders.price_rub,
+                product_settings.price_rub AS product_price_rub,
+                product_settings.price_usd AS product_price_usd
             FROM orders
-            WHERE (created_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
-                AND status <> 'Отменен'
+            LEFT JOIN product_settings ON product_settings.code = orders.product_code
+            WHERE (orders.created_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
+                AND orders.status <> 'Отменен'
             """,
             (REPORT_TZ, REPORT_TZ),
         ).fetchall()
@@ -810,11 +874,11 @@ async def daily_business_stats() -> dict:
             (REPORT_TZ, REPORT_TZ),
         ).fetchone()
 
-    price_usd = Decimal(product["price_usd"])
-    price_rub = Decimal(product["price_rub"])
     revenue_usd = Decimal("0")
-    if price_rub > 0:
-        for order in orders:
+    for order in orders:
+        price_rub = Decimal(order["product_price_rub"] or 0)
+        price_usd = Decimal(order["product_price_usd"] or 0)
+        if price_rub > 0:
             quantity = Decimal(order["price_rub"]) / price_rub
             revenue_usd += quantity * price_usd
     issued_links = issued_summary["count"]
@@ -826,7 +890,7 @@ async def daily_business_stats() -> dict:
         "orders_count": row["orders_count"],
         "revenue_rub": row["revenue_rub"],
         "issued_links": issued_links,
-        "price_usd": price_usd,
+        "price_usd": Decimal("0"),
         "cost_per_link_usd": average_cost_usd,
         "revenue_usd": revenue_usd,
         "cost_usd": cost_usd,
@@ -858,6 +922,25 @@ async def get_product_config(code: str = "gemini_link_18_month") -> dict:
     await ensure_schema()
     with get_conn() as conn:
         return conn.execute("SELECT * FROM product_settings WHERE code = %s", (code,)).fetchone()
+
+
+async def list_product_configs() -> list[dict]:
+    await ensure_schema()
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT *
+            FROM product_settings
+            ORDER BY
+                CASE code
+                    WHEN 'gemini_link_18_month' THEN 1
+                    WHEN 'gpt_account_full_warranty' THEN 2
+                    WHEN 'gemini_account_12_month' THEN 3
+                    ELSE 10
+                END,
+                title
+            """
+        ).fetchall()
 
 
 async def update_product_config(

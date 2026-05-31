@@ -44,6 +44,7 @@ from db import (
     get_crypto_payment,
     get_platega_payment,
     get_product_config,
+    list_product_configs,
     get_transactions,
     get_user,
     get_user_orders,
@@ -112,6 +113,12 @@ def format_price(product: dict) -> str:
     return f"{price_rub} ₽ / {price_usd:g} $"
 
 
+def product_icon(product_code: str) -> str:
+    if "gpt" in product_code:
+        return ce("shop")
+    return ce("gemini")
+
+
 def format_usd(value: Decimal) -> str:
     return f"{value.normalize():f}"
 
@@ -121,9 +128,9 @@ def calculate_order_price(product: dict, quantity: int) -> dict[str, Decimal | i
     base_usd = Decimal(str(product["price_usd"]))
     unit_usd = base_usd
 
-    if quantity >= 15:
+    if product.get("code") == PRODUCT_CODE and quantity >= 15:
         unit_usd = Decimal("1.5")
-    elif quantity >= 10:
+    elif product.get("code") == PRODUCT_CODE and quantity >= 10:
         unit_usd = Decimal("1.6")
 
     if base_usd > 0:
@@ -412,32 +419,33 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 
 
 async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
-    product = await get_product_config(PRODUCT_CODE)
-    stock = await count_available_links()
-    price = format_price(product)
     back = "⬅️ Back" if lang == "en" else "⬅️ Назад"
     item_suffix = "pcs" if lang == "en" else "шт."
+    products = await list_product_configs()
+    rows = []
+    for product in products:
+        stock = await count_available_links(product["code"])
+        price = format_price(product)
+        rows.append([
+            InlineKeyboardButton(
+                text=f"🛍 {product['title']} | {price} | {stock} {item_suffix}",
+                callback_data=f"product:{product['code']}",
+            )
+        ])
+    rows.append([InlineKeyboardButton(text=back, callback_data="menu:home")])
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=f"🛍 {product['title']} | {price} | {stock} {item_suffix}",
-                    callback_data=f"product:{PRODUCT_CODE}",
-                )
-            ],
-            [InlineKeyboardButton(text=back, callback_data="menu:home")],
-        ]
+        inline_keyboard=rows
     )
 
 
-def product_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
+def product_keyboard(lang: str = "ru", product_code: str = PRODUCT_CODE) -> InlineKeyboardMarkup:
     if lang == "en":
         buttons = [
-            [InlineKeyboardButton(text="🛒 Buy", callback_data="buy:start")],
+            [InlineKeyboardButton(text="🛒 Buy", callback_data=f"buy:start:{product_code}")],
         ]
     else:
         buttons = [
-            [InlineKeyboardButton(text="🛒 Купить", callback_data="buy:start")],
+            [InlineKeyboardButton(text="🛒 Купить", callback_data=f"buy:start:{product_code}")],
         ]
 
     return InlineKeyboardMarkup(
@@ -464,7 +472,7 @@ def topup_payment_keyboard(amount: int, lang: str = "ru") -> InlineKeyboardMarku
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def quantity_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
+def quantity_keyboard(lang: str = "ru", product_code: str = PRODUCT_CODE) -> InlineKeyboardMarkup:
     custom_text = "✍️ Custom quantity" if lang == "en" else "✍️ Своё количество"
     back_text = "⬅️ Product" if lang == "en" else "⬅️ Тарифы"
     return InlineKeyboardMarkup(
@@ -479,7 +487,7 @@ def quantity_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="20", callback_data="buy:qty:20"),
             ],
             [InlineKeyboardButton(text=custom_text, callback_data="buy:custom")],
-            [InlineKeyboardButton(text=back_text, callback_data=f"product:{PRODUCT_CODE}")],
+            [InlineKeyboardButton(text=back_text, callback_data=f"product:{product_code}")],
         ]
     )
 
@@ -646,9 +654,14 @@ def language_keyboard() -> InlineKeyboardMarkup:
 
 
 async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
-    product = await get_product_config(PRODUCT_CODE)
-    stock = await count_available_links()
-    price = format_price(product)
+    products = await list_product_configs()
+    product_lines = []
+    total_stock = 0
+    item_suffix = "pcs" if lang == "en" else "шт."
+    for product in products:
+        stock = await count_available_links(product["code"])
+        total_stock += stock
+        product_lines.append(f"{product_icon(product['code'])} {product['title']} | {format_price(product)} | {stock} {item_suffix}")
     greeting_name = f", {html.escape(user_name)}" if user_name else ""
 
     if lang == "en":
@@ -656,8 +669,7 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
             f"{ce('spark')} <b>Welcome to the store{greeting_name}!</b>\n\n"
             f"{ce('gemini')} <b>Available product:</b>\n"
             "<blockquote>"
-            f"{ce('gemini')} {product['title']} | {price}\n"
-            f"{ce('link')} Activation via personal link"
+            + "\n".join(product_lines) +
             "</blockquote>\n\n"
             f"{ce('fire')} <b>Why choose us:</b>\n"
             "<blockquote>"
@@ -666,7 +678,7 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
             f"{ce('ok')} Activation warranty\n"
             f"{ce('support')} Support: {SUPPORT_USERNAME}"
             "</blockquote>\n\n"
-            f"{ce('stock')} <b>In stock:</b> {stock}\n\n"
+            f"{ce('stock')} <b>In stock:</b> {total_stock}\n\n"
             "Choose an action below:"
         )
 
@@ -674,8 +686,7 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
         f"{ce('spark')} <b>Добро пожаловать в магазин{greeting_name}!</b>\n\n"
         f"{ce('shop')} <b>В нашем магазине вы можете приобрести:</b>\n"
         "<blockquote>"
-        f"{ce('gemini')} {product['title']} | {price}\n"
-        f"{ce('link')} Активация по персональной ссылке"
+        + "\n".join(product_lines) +
         "</blockquote>\n\n"
         f"{ce('fire')} <b>Наши преимущества:</b>\n"
         "<blockquote>"
@@ -684,7 +695,7 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
         f"{ce('ok')} Гарантия на активацию\n"
         f"{ce('support')} Поддержка: {SUPPORT_USERNAME}"
         "</blockquote>\n\n"
-        f"{ce('stock')} <b>Сейчас в наличии:</b> {stock}\n\n"
+        f"{ce('stock')} <b>Сейчас в наличии:</b> {total_stock}\n\n"
         "Выберите действие ниже:"
     )
 
@@ -708,28 +719,28 @@ def support_text(lang: str = "ru") -> str:
     )
 
 
-async def product_text(lang: str = "ru") -> str:
-    product = await get_product_config(PRODUCT_CODE)
-    stock = await count_available_links()
+async def product_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> str:
+    product = await get_product_config(product_code)
+    stock = await count_available_links(product_code)
     price = format_price(product)
 
     if lang == "en":
         return (
-            f"{ce('gemini')} <b>{product['title']}</b>\n\n"
+            f"{product_icon(product_code)} <b>{product['title']}</b>\n\n"
             f"{product['description']}\n\n"
             f"{ce('news_money')} <b>Price:</b> {price}\n"
             f"{ce('stock')} <b>Stock:</b> {stock}\n"
             f"{ce('news_bolt')} <b>Delivery:</b> after order confirmation.\n\n"
-            "If links are temporarily out of stock, your order can be reserved and processed after restock."
+            "If the item is temporarily out of stock, your order can be reserved and processed after restock."
         )
 
     return (
-        f"{ce('gemini')} <b>{product['title']}</b>\n\n"
+        f"{product_icon(product_code)} <b>{product['title']}</b>\n\n"
         f"{product['description']}\n\n"
         f"{ce('news_money')} <b>Цена:</b> {price}\n"
         f"{ce('stock')} <b>Количество:</b> {stock}\n"
         f"{ce('news_bolt')} <b>Выдача:</b> после подтверждения заказа.\n\n"
-        "Если ссылки временно закончились, заказ можно зарезервировать и обработать после пополнения наличия."
+        "Если товар временно закончился, заказ можно зарезервировать и обработать после пополнения наличия."
     )
 
 
@@ -974,22 +985,22 @@ def delivery_text(links: list[dict], lang: str = "ru") -> str:
     if len(links) == 1:
         url = html.escape(str(links[0]["url"]))
         return (
-            f"{ce('ok')} <b>Your link</b>\n\n<code>{url}</code>"
+            f"{ce('ok')} <b>Your item</b>\n\n<code>{url}</code>"
             if lang == "en"
-            else f"{ce('ok')} <b>Ваша ссылка</b>\n\n<code>{url}</code>"
+            else f"{ce('ok')} <b>Ваш товар</b>\n\n<code>{url}</code>"
         )
 
     lines = [f"{index}. <code>{html.escape(str(link['url']))}</code>" for index, link in enumerate(links, start=1)]
     return (
-        f"{ce('ok')} <b>Your links</b>\n\n" + "\n".join(lines)
+        f"{ce('ok')} <b>Your items</b>\n\n" + "\n".join(lines)
         if lang == "en"
-        else f"{ce('ok')} <b>Ваши ссылки</b>\n\n" + "\n".join(lines)
+        else f"{ce('ok')} <b>Ваши товары</b>\n\n" + "\n".join(lines)
     )
 
 
 def delivery_file(order_id: int, links: list[dict]) -> BufferedInputFile:
     content = "\n".join(str(link["url"]) for link in links)
-    filename = f"links_order_{order_id}.txt"
+    filename = f"order_{order_id}_items.txt"
     return BufferedInputFile(content.encode("utf-8"), filename=filename)
 
 
@@ -1009,7 +1020,7 @@ async def deliver_order_links(message: Message, order_id: int, user_id: int, qua
         return []
     if links:
         await message.answer(delivery_text(links, lang))
-        caption = "Links as a file" if lang == "en" else "Ссылки файлом"
+        caption = "Items as a file" if lang == "en" else "Товар файлом"
         await message.answer_document(delivery_file(order_id, links), caption=caption)
         review_text = (
             f"{ce('news_pencil')} How was your purchase? You can leave a review."
@@ -1028,7 +1039,7 @@ async def deliver_order_links_to_user(bot: Bot, chat_id: int, order_id: int, qua
         return []
     if links:
         await bot.send_message(chat_id, delivery_text(links, lang))
-        caption = "Links as a file" if lang == "en" else "Ссылки файлом"
+        caption = "Items as a file" if lang == "en" else "Товар файлом"
         await bot.send_document(chat_id, delivery_file(order_id, links), caption=caption)
         review_text = (
             f"{ce('news_pencil')} How was your purchase? You can leave a review."
@@ -1142,29 +1153,39 @@ async def auto_payment_watcher(bot: Bot) -> None:
         await asyncio.sleep(5)
 
 
-async def quantity_text(lang: str = "ru") -> str:
-    product = await get_product_config(PRODUCT_CODE)
-    stock = await count_available_links()
+async def quantity_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> str:
+    product = await get_product_config(product_code)
+    stock = await count_available_links(product_code)
     price = int(product["price_rub"])
     tier_10 = calculate_order_price(product, 10)
     tier_15 = calculate_order_price(product, 15)
+    wholesale_en = (
+        f"{ce('fire')} Wholesale: from <b>10 pcs.</b> — <b>{format_usd(tier_10['unit_usd'])}$</b> / <b>{tier_10['unit_rub']} ₽</b>, "
+        f"from <b>15 pcs.</b> — <b>{format_usd(tier_15['unit_usd'])}$</b> / <b>{tier_15['unit_rub']} ₽</b>\n"
+        if product_code == PRODUCT_CODE
+        else ""
+    )
+    wholesale_ru = (
+        f"{ce('fire')} Опт: от <b>10 шт.</b> — <b>{format_usd(tier_10['unit_usd'])}$</b> / <b>{tier_10['unit_rub']} ₽</b>, "
+        f"от <b>15 шт.</b> — <b>{format_usd(tier_15['unit_usd'])}$</b> / <b>{tier_15['unit_rub']} ₽</b>\n"
+        if product_code == PRODUCT_CODE
+        else ""
+    )
     if lang == "en":
         return (
             f"🔢 <b>Choose quantity</b>\n\n"
-            f"{ce('gemini')} Product: <b>{product['title']}</b>\n"
+            f"{product_icon(product_code)} Product: <b>{product['title']}</b>\n"
             f"{ce('news_money')} Price per item: <b>{price} ₽</b>\n"
-            f"{ce('fire')} Wholesale: from <b>10 pcs.</b> — <b>{format_usd(tier_10['unit_usd'])}$</b> / <b>{tier_10['unit_rub']} ₽</b>, "
-            f"from <b>15 pcs.</b> — <b>{format_usd(tier_15['unit_usd'])}$</b> / <b>{tier_15['unit_rub']} ₽</b>\n"
+            f"{wholesale_en}"
             f"{ce('stock')} In stock: <b>{stock} pcs.</b>\n\n"
             "Choose quantity below or press <b>Custom quantity</b>."
         )
 
     return (
         f"🔢 <b>Выберите количество</b>\n\n"
-        f"{ce('gemini')} Товар: <b>{product['title']}</b>\n"
+        f"{product_icon(product_code)} Товар: <b>{product['title']}</b>\n"
         f"{ce('news_money')} Цена за 1 шт.: <b>{price} ₽</b>\n"
-        f"{ce('fire')} Опт: от <b>10 шт.</b> — <b>{format_usd(tier_10['unit_usd'])}$</b> / <b>{tier_10['unit_rub']} ₽</b>, "
-        f"от <b>15 шт.</b> — <b>{format_usd(tier_15['unit_usd'])}$</b> / <b>{tier_15['unit_rub']} ₽</b>\n"
+        f"{wholesale_ru}"
         f"{ce('stock')} В наличии: <b>{stock} шт.</b>\n\n"
         "Выберите количество ниже или нажмите <b>Своё количество</b>."
     )
@@ -1175,11 +1196,12 @@ async def process_balance_quantity_order(
     state: FSMContext,
     bot: Bot,
     quantity: int,
+    product_code: str = PRODUCT_CODE,
 ) -> None:
     await ensure_user(message.chat.id, message.chat.username, message.chat.first_name)
     lang = await get_lang(message.chat.id)
-    product = await get_product_config(PRODUCT_CODE)
-    stock = await count_available_links()
+    product = await get_product_config(product_code)
+    stock = await count_available_links(product_code)
 
     if quantity <= 0:
         text = "Quantity must be at least 1." if lang == "en" else "Количество должно быть от 1."
@@ -1192,7 +1214,7 @@ async def process_balance_quantity_order(
             if lang == "en"
             else f"Сейчас в наличии только <b>{stock}</b> шт. Выберите количество поменьше."
         )
-        await message.answer(text, reply_markup=quantity_keyboard(lang))
+        await message.answer(text, reply_markup=quantity_keyboard(lang, product_code))
         return
 
     user = await get_user(message.chat.id)
@@ -1217,7 +1239,7 @@ async def process_balance_quantity_order(
     order = await create_balance_order(
         user_id=message.chat.id,
         username=username,
-        product_code=PRODUCT_CODE,
+        product_code=product_code,
         product_title=order_title,
         price_rub=total,
         contact=contact,
@@ -1270,10 +1292,12 @@ async def process_balance_quantity_order(
 
 
 async def show_payment_methods_for_quantity(message: Message, state: FSMContext, quantity: int, lang: str) -> None:
-    stock = await count_available_links()
+    data = await state.get_data()
+    product_code = data.get("bulk_product_code") or PRODUCT_CODE
+    stock = await count_available_links(product_code)
     if quantity <= 0:
         text = "Quantity must be at least 1." if lang == "en" else "Количество должно быть от 1."
-        await message.answer(text, reply_markup=quantity_keyboard(lang))
+        await message.answer(text, reply_markup=quantity_keyboard(lang, product_code))
         return
 
     if stock and quantity > stock:
@@ -1282,13 +1306,13 @@ async def show_payment_methods_for_quantity(message: Message, state: FSMContext,
             if lang == "en"
             else f"Сейчас в наличии только <b>{stock}</b> шт. Выберите количество поменьше."
         )
-        await message.answer(text, reply_markup=quantity_keyboard(lang))
+        await message.answer(text, reply_markup=quantity_keyboard(lang, product_code))
         return
 
-    product = await get_product_config(PRODUCT_CODE)
+    product = await get_product_config(product_code)
     pricing = calculate_order_price(product, quantity)
     total = int(pricing["total_rub"])
-    await state.update_data(bulk_quantity=quantity)
+    await state.update_data(bulk_quantity=quantity, bulk_product_code=product_code)
     await state.set_state(BulkOrderState.waiting_for_payment)
     text = (
         f"{ce('news_money')} Choose how to pay for the order.\n\n"
@@ -1745,10 +1769,12 @@ async def open_catalog(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data == f"product:{PRODUCT_CODE}")
-async def open_product(callback: CallbackQuery) -> None:
+@router.callback_query(F.data.startswith("product:"))
+async def open_product(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(selected_product_code=callback.data.split(":", 1)[1])
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(await product_text(lang), reply_markup=product_keyboard(lang))
+    product_code = callback.data.split(":", 1)[1]
+    await callback.message.edit_text(await product_text(lang, product_code), reply_markup=product_keyboard(lang, product_code))
     await callback.answer()
 
 
@@ -2080,11 +2106,14 @@ async def set_language(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data.in_({"buy:start", "bulk:start"}))
+@router.callback_query(F.data.startswith("buy:start") | (F.data == "bulk:start"))
 async def start_bulk_order(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
+    parts = callback.data.split(":")
+    product_code = parts[2] if len(parts) > 2 else PRODUCT_CODE
     await state.clear()
-    await callback.message.answer(await quantity_text(lang), reply_markup=quantity_keyboard(lang))
+    await state.update_data(bulk_product_code=product_code)
+    await callback.message.answer(await quantity_text(lang, product_code), reply_markup=quantity_keyboard(lang, product_code))
     await callback.answer()
 
 
@@ -2133,6 +2162,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
     lang = await get_lang(callback.from_user.id)
     data = await state.get_data()
     quantity = int(data.get("bulk_quantity") or 0)
+    product_code = data.get("bulk_product_code") or PRODUCT_CODE
     method = callback.data.split(":")[-1]
 
     if quantity <= 0:
@@ -2142,7 +2172,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
         await callback.answer()
         return
 
-    stock = await count_available_links()
+    stock = await count_available_links(product_code)
     if stock and quantity > stock:
         await state.set_state(BulkOrderState.waiting_for_quantity)
         text = (
@@ -2155,7 +2185,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
         return
 
     if method != "balance":
-        product = await get_product_config(PRODUCT_CODE)
+        product = await get_product_config(product_code)
         pricing = calculate_order_price(product, quantity)
         total = int(pricing["total_rub"])
         if method in {"cryptobot", "platega"}:
@@ -2170,7 +2200,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
                         total,
                         "bulk_order",
                         lang,
-                        product_code=PRODUCT_CODE,
+                        product_code=product_code,
                         product_title=title,
                         quantity=quantity,
                         contact=contact,
@@ -2182,7 +2212,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
                         total,
                         "bulk_order",
                         lang,
-                        product_code=PRODUCT_CODE,
+                        product_code=product_code,
                         product_title=title,
                         quantity=quantity,
                         contact=contact,
@@ -2217,7 +2247,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
         return
 
     user = await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
-    product = await get_product_config(PRODUCT_CODE)
+    product = await get_product_config(product_code)
     pricing = calculate_order_price(product, quantity)
     total = int(pricing["total_rub"])
     balance = int(user["balance"])
@@ -2260,10 +2290,11 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
 async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) -> None:
     await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     lang = await get_lang(message.from_user.id)
-    product = await get_product_config(PRODUCT_CODE)
     data = await state.get_data()
     quantity = int(data.get("bulk_quantity") or 0)
-    stock = await count_available_links()
+    product_code = data.get("bulk_product_code") or PRODUCT_CODE
+    product = await get_product_config(product_code)
+    stock = await count_available_links(product_code)
     contact = (message.text or "").strip()
 
     if quantity <= 0:
@@ -2300,7 +2331,7 @@ async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) ->
     order = await create_balance_order(
         user_id=message.from_user.id,
         username=username,
-        product_code=PRODUCT_CODE,
+        product_code=product_code,
         product_title=order_title,
         price_rub=total,
         contact=contact,
