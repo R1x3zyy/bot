@@ -1036,11 +1036,13 @@ def gpt_account_notice(lang: str = "ru") -> str:
     if lang == "en":
         return (
             f"\n\n{ce('news_shield')} <b>Important:</b> after logging in, change the account details immediately. "
+            "Use a reliable proxy or a good VPN for stable access. "
             "If the details are not changed and then someone changes access to the account, the warranty will no longer apply."
         )
 
     return (
         f"\n\n{ce('news_shield')} <b>Важно:</b> после входа сразу поменяйте данные аккаунта. "
+        "Для стабильного использования используйте хороший прокси или хороший VPN. "
         "Если данные не поменяли, а затем у аккаунта изменили доступ, гарантия слетает."
     )
 
