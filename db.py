@@ -165,8 +165,8 @@ async def ensure_schema() -> None:
             (
                 "gemini_link_18_month",
                 "Gemini Link 18 months",
-                Decimal("145.00"),
-                Decimal("2.00"),
+                Decimal("116.00"),
+                Decimal("1.60"),
                 (
                     "Гарантийная поддержка распространяется на момент активации персональной ссылки.\n\n"
                     "Google AI Pro на 18 месяцев с доступом к возможностям Gemini, Veo, генерации изображений, "
