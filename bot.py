@@ -123,10 +123,16 @@ def product_icon(product_code: str) -> str:
     return ce("gemini")
 
 
-async def send_profile_banner(message: Message, caption: str | None = None) -> None:
-    if not os.path.exists(PROFILE_BANNER_PATH):
+async def answer_with_banner(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    if os.path.exists(PROFILE_BANNER_PATH):
+        await message.answer_photo(FSInputFile(PROFILE_BANNER_PATH), caption=text, reply_markup=reply_markup)
         return
-    await message.answer_photo(FSInputFile(PROFILE_BANNER_PATH), caption=caption)
+
+    await message.answer(text, reply_markup=reply_markup)
 
 
 def format_usd(value: Decimal) -> str:
@@ -1347,8 +1353,11 @@ async def start(message: Message) -> None:
         await cleanup.delete()
     except Exception:
         logging.exception("Could not delete reply keyboard cleanup message")
-    await send_profile_banner(message)
-    await message.answer(await home_text(lang, display_user_name(message.from_user)), reply_markup=start_keyboard(lang))
+    await answer_with_banner(
+        message,
+        await home_text(lang, display_user_name(message.from_user)),
+        reply_markup=start_keyboard(lang),
+    )
 
 
 @router.chat_member()
@@ -1396,7 +1405,11 @@ async def check_subscription(callback: CallbackQuery, bot: Bot) -> None:
 
     text = f"{ce('ok')} Subscription confirmed." if lang == "en" else f"{ce('ok')} Подписка подтверждена."
     await callback.message.answer(text)
-    await callback.message.answer(await home_text(lang, display_user_name(callback.from_user)), reply_markup=start_keyboard(lang))
+    await answer_with_banner(
+        callback.message,
+        await home_text(lang, display_user_name(callback.from_user)),
+        reply_markup=start_keyboard(lang),
+    )
     await callback.answer()
 
 
@@ -1658,7 +1671,7 @@ async def show_catalog(message: Message) -> None:
 async def show_profile(message: Message) -> None:
     await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     lang = await get_lang(message.from_user.id)
-    await message.answer(await profile_text(message.from_user.id, lang), reply_markup=profile_keyboard(lang))
+    await answer_with_banner(message, await profile_text(message.from_user.id, lang), reply_markup=profile_keyboard(lang))
 
 
 @router.message(F.text.casefold().in_({"поддержка", "support"}))
@@ -1825,8 +1838,11 @@ async def cancel_review(callback: CallbackQuery, state: FSMContext) -> None:
 async def open_home(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     lang = await get_lang(callback.from_user.id)
-    await send_profile_banner(callback.message)
-    await callback.message.answer(await home_text(lang, display_user_name(callback.from_user)), reply_markup=start_keyboard(lang))
+    await answer_with_banner(
+        callback.message,
+        await home_text(lang, display_user_name(callback.from_user)),
+        reply_markup=start_keyboard(lang),
+    )
     await callback.answer()
 
 
@@ -1852,8 +1868,11 @@ async def open_profile(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     lang = await get_lang(callback.from_user.id)
-    await send_profile_banner(callback.message)
-    await callback.message.answer(await profile_text(callback.from_user.id, lang), reply_markup=profile_keyboard(lang))
+    await answer_with_banner(
+        callback.message,
+        await profile_text(callback.from_user.id, lang),
+        reply_markup=profile_keyboard(lang),
+    )
     await callback.answer()
 
 
