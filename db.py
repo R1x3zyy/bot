@@ -437,7 +437,7 @@ async def issue_links_to_order(order_id: int, user_id: int, quantity: int, statu
 
         links = conn.execute(
             """
-            SELECT id, url
+            SELECT id, url, product_code
             FROM links
             WHERE is_issued = FALSE
                 AND product_code = %s

@@ -1013,20 +1013,34 @@ async def send_platega_invoice(
     await message.answer(text, reply_markup=platega_invoice_keyboard(payment["id"], payment_url, lang))
 
 
-def delivery_text(links: list[dict], lang: str = "ru") -> str:
+def gpt_account_notice(lang: str = "ru") -> str:
+    if lang == "en":
+        return (
+            f"\n\n{ce('news_shield')} <b>Important:</b> after logging in, change the account details immediately. "
+            "If the details are not changed and then someone changes access to the account, the warranty will no longer apply."
+        )
+
+    return (
+        f"\n\n{ce('news_shield')} <b>Важно:</b> после входа сразу поменяйте данные аккаунта. "
+        "Если данные не поменяли, а затем у аккаунта изменили доступ, гарантия слетает."
+    )
+
+
+def delivery_text(links: list[dict], lang: str = "ru", product_code: str = "") -> str:
+    notice = gpt_account_notice(lang) if product_code == GPT_ACCOUNT_PRODUCT_CODE else ""
     if len(links) == 1:
         url = html.escape(str(links[0]["url"]))
         return (
-            f"{ce('ok')} <b>Your item</b>\n\n<code>{url}</code>"
+            f"{ce('ok')} <b>Your item</b>\n\n<code>{url}</code>{notice}"
             if lang == "en"
-            else f"{ce('ok')} <b>Ваш товар</b>\n\n<code>{url}</code>"
+            else f"{ce('ok')} <b>Ваш товар</b>\n\n<code>{url}</code>{notice}"
         )
 
     lines = [f"{index}. <code>{html.escape(str(link['url']))}</code>" for index, link in enumerate(links, start=1)]
     return (
-        f"{ce('ok')} <b>Your items</b>\n\n" + "\n".join(lines)
+        f"{ce('ok')} <b>Your items</b>\n\n" + "\n".join(lines) + notice
         if lang == "en"
-        else f"{ce('ok')} <b>Ваши товары</b>\n\n" + "\n".join(lines)
+        else f"{ce('ok')} <b>Ваши товары</b>\n\n" + "\n".join(lines) + notice
     )
 
 
@@ -1051,7 +1065,8 @@ async def deliver_order_links(message: Message, order_id: int, user_id: int, qua
     if links is None:
         return []
     if links:
-        await message.answer(delivery_text(links, lang))
+        product_code = str(links[0].get("product_code") or "")
+        await message.answer(delivery_text(links, lang, product_code))
         caption = "Items as a file" if lang == "en" else "Товар файлом"
         await message.answer_document(delivery_file(order_id, links), caption=caption)
         review_text = (
@@ -1070,7 +1085,8 @@ async def deliver_order_links_to_user(bot: Bot, chat_id: int, order_id: int, qua
     if links is None:
         return []
     if links:
-        await bot.send_message(chat_id, delivery_text(links, lang))
+        product_code = str(links[0].get("product_code") or "")
+        await bot.send_message(chat_id, delivery_text(links, lang, product_code))
         caption = "Items as a file" if lang == "en" else "Товар файлом"
         await bot.send_document(chat_id, delivery_file(order_id, links), caption=caption)
         review_text = (
