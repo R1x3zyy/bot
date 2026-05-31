@@ -14,6 +14,7 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/gemini_store")
 URL_RE = re.compile(r"https?://\S+")
 PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "1.50"))
+NEW_LINK_COST_USD = Decimal(os.getenv("NEW_LINK_COST_USD", "1.10"))
 REPORT_TZ = os.getenv("REPORT_TZ", "Europe/Moscow")
 
 
@@ -40,6 +41,7 @@ async def ensure_schema() -> None:
             CREATE TABLE IF NOT EXISTS links (
                 id BIGSERIAL PRIMARY KEY,
                 url TEXT NOT NULL,
+                purchase_cost_usd NUMERIC(12, 2) NOT NULL DEFAULT 1.50,
                 is_issued BOOLEAN NOT NULL DEFAULT FALSE,
                 issued_to BIGINT REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -142,6 +144,9 @@ async def ensure_schema() -> None:
         conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 0")
         conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS contact TEXT NOT NULL DEFAULT ''")
         conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS order_id BIGINT REFERENCES orders(id) ON DELETE SET NULL")
+        conn.execute(
+            "ALTER TABLE links ADD COLUMN IF NOT EXISTS purchase_cost_usd NUMERIC(12, 2) NOT NULL DEFAULT 1.50"
+        )
         conn.execute(
             """
             INSERT INTO product_settings (code, title, price_rub, price_usd, description)
@@ -317,7 +322,10 @@ async def add_links(links: list[str]) -> int:
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.executemany("INSERT INTO links (url) VALUES (%s)", [(link,) for link in clean_links])
+            cur.executemany(
+                "INSERT INTO links (url, purchase_cost_usd) VALUES (%s, %s)",
+                [(link, NEW_LINK_COST_USD) for link in clean_links],
+            )
     return len(clean_links)
 
 
@@ -325,7 +333,7 @@ async def list_links(limit: int = 100) -> list[dict]:
     with get_conn() as conn:
         return conn.execute(
             """
-            SELECT id, url, is_issued, issued_to, created_at, issued_at
+            SELECT id, url, purchase_cost_usd, is_issued, issued_to, created_at, issued_at
             FROM links
             ORDER BY created_at DESC
             LIMIT %s
@@ -789,16 +797,18 @@ async def daily_business_stats() -> dict:
             """,
             (REPORT_TZ, REPORT_TZ),
         ).fetchall()
-        issued_links = conn.execute(
+        issued_summary = conn.execute(
             """
-            SELECT count(*)::int AS count
+            SELECT
+                count(*)::int AS count,
+                COALESCE(sum(purchase_cost_usd), 0) AS cost_usd
             FROM links
             WHERE is_issued = TRUE
                 AND issued_at IS NOT NULL
                 AND (issued_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
             """,
             (REPORT_TZ, REPORT_TZ),
-        ).fetchone()["count"]
+        ).fetchone()
 
     price_usd = Decimal(product["price_usd"])
     price_rub = Decimal(product["price_rub"])
@@ -807,7 +817,9 @@ async def daily_business_stats() -> dict:
         for order in orders:
             quantity = Decimal(order["price_rub"]) / price_rub
             revenue_usd += quantity * price_usd
-    cost_usd = PRODUCT_COST_USD * issued_links
+    issued_links = issued_summary["count"]
+    cost_usd = Decimal(issued_summary["cost_usd"])
+    average_cost_usd = cost_usd / issued_links if issued_links else Decimal("0")
     profit_usd = revenue_usd - cost_usd
     return {
         "date": row["day"],
@@ -815,7 +827,7 @@ async def daily_business_stats() -> dict:
         "revenue_rub": row["revenue_rub"],
         "issued_links": issued_links,
         "price_usd": price_usd,
-        "cost_per_link_usd": PRODUCT_COST_USD,
+        "cost_per_link_usd": average_cost_usd,
         "revenue_usd": revenue_usd,
         "cost_usd": cost_usd,
         "profit_usd": profit_usd,

@@ -396,7 +396,7 @@ function App() {
             </span>
           </div>
           <p className="finance-note">
-            Закуп: ${Number(businessDay.cost_per_link_usd).toFixed(2)} за ссылку. Цена продажи из настроек товара: ${Number(businessDay.price_usd).toFixed(2)}.
+            Закуп считается по каждой выданной ссылке отдельно. Средний закуп за сегодня: ${Number(businessDay.cost_per_link_usd).toFixed(2)}.
           </p>
         </section>
       )}
