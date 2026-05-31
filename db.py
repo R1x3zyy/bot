@@ -16,6 +16,9 @@ URL_RE = re.compile(r"https?://\S+")
 PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "1.50"))
 NEW_LINK_COST_USD = Decimal(os.getenv("NEW_LINK_COST_USD", "1.10"))
 REPORT_TZ = os.getenv("REPORT_TZ", "Europe/Moscow")
+ADMIN_ID = os.getenv("ADMIN_ID", "")
+if not ADMIN_ID.isdigit():
+    ADMIN_ID = ""
 DEFAULT_PRODUCT_CODE = "gemini_link_18_month"
 GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
 
@@ -877,9 +880,10 @@ async def daily_business_stats() -> dict:
             FROM links
             WHERE is_issued = TRUE
                 AND issued_at IS NOT NULL
+                AND (%s = '' OR issued_to IS DISTINCT FROM %s::bigint)
                 AND (issued_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
             """,
-            (REPORT_TZ, REPORT_TZ),
+            (ADMIN_ID, ADMIN_ID or "0", REPORT_TZ, REPORT_TZ),
         ).fetchone()
 
     revenue_usd = Decimal("0")
