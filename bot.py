@@ -17,6 +17,7 @@ from aiogram.types import (
     BotCommand,
     BotCommandScopeChat,
     BotCommandScopeDefault,
+    BufferedInputFile,
     CallbackQuery,
     ChatMemberUpdated,
     InlineKeyboardButton,
@@ -986,6 +987,12 @@ def delivery_text(links: list[dict], lang: str = "ru") -> str:
     )
 
 
+def delivery_file(order_id: int, links: list[dict]) -> BufferedInputFile:
+    content = "\n".join(str(link["url"]) for link in links)
+    filename = f"links_order_{order_id}.txt"
+    return BufferedInputFile(content.encode("utf-8"), filename=filename)
+
+
 def reserved_text(lang: str = "ru") -> str:
     return (
         f"{ce('stock')} The order is paid, but there are not enough links in stock. "
@@ -1002,6 +1009,8 @@ async def deliver_order_links(message: Message, order_id: int, user_id: int, qua
         return []
     if links:
         await message.answer(delivery_text(links, lang))
+        caption = "Links as a file" if lang == "en" else "Ссылки файлом"
+        await message.answer_document(delivery_file(order_id, links), caption=caption)
         review_text = (
             f"{ce('news_pencil')} How was your purchase? You can leave a review."
             if lang == "en"
@@ -1019,6 +1028,8 @@ async def deliver_order_links_to_user(bot: Bot, chat_id: int, order_id: int, qua
         return []
     if links:
         await bot.send_message(chat_id, delivery_text(links, lang))
+        caption = "Links as a file" if lang == "en" else "Ссылки файлом"
+        await bot.send_document(chat_id, delivery_file(order_id, links), caption=caption)
         review_text = (
             f"{ce('news_pencil')} How was your purchase? You can leave a review."
             if lang == "en"
