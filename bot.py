@@ -3,6 +3,7 @@ import html
 import logging
 import os
 import re
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Awaitable, Callable
 
 import aiohttp
@@ -108,6 +109,32 @@ def format_price(product: dict) -> str:
     price_rub = int(product["price_rub"])
     price_usd = float(product["price_usd"])
     return f"{price_rub} ₽ / {price_usd:g} $"
+
+
+def format_usd(value: Decimal) -> str:
+    return f"{value.normalize():f}"
+
+
+def calculate_order_price(product: dict, quantity: int) -> dict[str, Decimal | int]:
+    base_rub = Decimal(str(product["price_rub"]))
+    base_usd = Decimal(str(product["price_usd"]))
+    unit_usd = base_usd
+
+    if quantity >= 15:
+        unit_usd = Decimal("1.5")
+    elif quantity >= 10:
+        unit_usd = Decimal("1.6")
+
+    if base_usd > 0:
+        unit_rub = (base_rub / base_usd * unit_usd).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    else:
+        unit_rub = base_rub.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    return {
+        "unit_rub": int(unit_rub),
+        "unit_usd": unit_usd,
+        "total_rub": int(unit_rub) * quantity,
+    }
 
 
 def balance_topup_text(balance: int, required: int, lang: str = "ru") -> str:
@@ -1108,11 +1135,15 @@ async def quantity_text(lang: str = "ru") -> str:
     product = await get_product_config(PRODUCT_CODE)
     stock = await count_available_links()
     price = int(product["price_rub"])
+    tier_10 = calculate_order_price(product, 10)
+    tier_15 = calculate_order_price(product, 15)
     if lang == "en":
         return (
             f"🔢 <b>Choose quantity</b>\n\n"
             f"{ce('gemini')} Product: <b>{product['title']}</b>\n"
             f"{ce('news_money')} Price per item: <b>{price} ₽</b>\n"
+            f"{ce('fire')} Wholesale: from <b>10 pcs.</b> — <b>{format_usd(tier_10['unit_usd'])}$</b> / <b>{tier_10['unit_rub']} ₽</b>, "
+            f"from <b>15 pcs.</b> — <b>{format_usd(tier_15['unit_usd'])}$</b> / <b>{tier_15['unit_rub']} ₽</b>\n"
             f"{ce('stock')} In stock: <b>{stock} pcs.</b>\n\n"
             "Choose quantity below or press <b>Custom quantity</b>."
         )
@@ -1121,6 +1152,8 @@ async def quantity_text(lang: str = "ru") -> str:
         f"🔢 <b>Выберите количество</b>\n\n"
         f"{ce('gemini')} Товар: <b>{product['title']}</b>\n"
         f"{ce('news_money')} Цена за 1 шт.: <b>{price} ₽</b>\n"
+        f"{ce('fire')} Опт: от <b>10 шт.</b> — <b>{format_usd(tier_10['unit_usd'])}$</b> / <b>{tier_10['unit_rub']} ₽</b>, "
+        f"от <b>15 шт.</b> — <b>{format_usd(tier_15['unit_usd'])}$</b> / <b>{tier_15['unit_rub']} ₽</b>\n"
         f"{ce('stock')} В наличии: <b>{stock} шт.</b>\n\n"
         "Выберите количество ниже или нажмите <b>Своё количество</b>."
     )
@@ -1153,7 +1186,8 @@ async def process_balance_quantity_order(
 
     user = await get_user(message.chat.id)
     balance = int(user["balance"]) if user else 0
-    total = int(product["price_rub"]) * quantity
+    pricing = calculate_order_price(product, quantity)
+    total = int(pricing["total_rub"])
     if balance < total:
         missing = total - balance
         await state.set_state(TopUpState.waiting_for_amount)
@@ -1241,16 +1275,19 @@ async def show_payment_methods_for_quantity(message: Message, state: FSMContext,
         return
 
     product = await get_product_config(PRODUCT_CODE)
-    total = int(product["price_rub"]) * quantity
+    pricing = calculate_order_price(product, quantity)
+    total = int(pricing["total_rub"])
     await state.update_data(bulk_quantity=quantity)
     await state.set_state(BulkOrderState.waiting_for_payment)
     text = (
         f"{ce('news_money')} Choose how to pay for the order.\n\n"
         f"Quantity: <b>{quantity}</b>\n"
+        f"Price per item: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
         f"Amount: <b>{total} ₽</b>"
         if lang == "en"
         else f"{ce('news_money')} Выберите способ оплаты заказа.\n\n"
         f"Количество: <b>{quantity}</b>\n"
+        f"Цена за 1 шт.: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
         f"Сумма: <b>{total} ₽</b>"
     )
     await message.answer(text, reply_markup=bulk_payment_keyboard(quantity, lang))
@@ -2108,7 +2145,8 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
 
     if method != "balance":
         product = await get_product_config(PRODUCT_CODE)
-        total = int(product["price_rub"]) * quantity
+        pricing = calculate_order_price(product, quantity)
+        total = int(pricing["total_rub"])
         if method in {"cryptobot", "platega"}:
             await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
             contact = f"@{callback.from_user.username}" if callback.from_user.username else f"id:{callback.from_user.id}"
@@ -2155,10 +2193,12 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
         text = (
             f"{ce('news_money')} Payment via <b>{method_name}</b> will be connected later.\n\n"
             f"Quantity: <b>{quantity}</b>\n"
+            f"Price per item: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
             f"Amount: <b>{total} ₽</b>"
             if lang == "en"
             else f"{ce('news_money')} Оплата через <b>{method_name}</b> будет подключена позже.\n\n"
             f"Количество: <b>{quantity}</b>\n"
+            f"Цена за 1 шт.: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
             f"Сумма: <b>{total} ₽</b>"
         )
         await callback.message.answer(text, reply_markup=bulk_payment_keyboard(quantity, lang))
@@ -2167,7 +2207,8 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
 
     user = await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     product = await get_product_config(PRODUCT_CODE)
-    total = int(product["price_rub"]) * quantity
+    pricing = calculate_order_price(product, quantity)
+    total = int(pricing["total_rub"])
     balance = int(user["balance"])
     if balance < total:
         missing = total - balance
@@ -2240,7 +2281,8 @@ async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) ->
         return
 
     username = f"@{message.from_user.username}" if message.from_user.username else "username не указан"
-    total = int(product["price_rub"]) * quantity
+    pricing = calculate_order_price(product, quantity)
+    total = int(pricing["total_rub"])
     order_title = f"{product['title']} ×{quantity}"
     status = "Ожидает обработки" if stock >= quantity else "Резерв, нет в наличии"
 
@@ -2270,6 +2312,7 @@ async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) ->
         f"Заказ: #{order['id']}\n"
         f"Товар: {product['title']}\n"
         f"Количество: {quantity}\n"
+        f"Цена за 1 шт.: {pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$\n"
         f"Сумма: {total} ₽\n"
         f"Оплата: баланс\n"
         f"Наличие ссылок: {stock}\n"
@@ -2329,7 +2372,8 @@ async def receive_crypto_order_contact(message: Message, state: FSMContext) -> N
     quantity = int(data.get("crypto_quantity") or 1)
     purpose = data.get("crypto_purpose") or "order"
     product = await get_product_config(PRODUCT_CODE)
-    total = int(product["price_rub"]) * quantity
+    pricing = calculate_order_price(product, quantity)
+    total = int(pricing["total_rub"])
     title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
 
     try:
