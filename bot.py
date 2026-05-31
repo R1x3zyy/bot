@@ -10,6 +10,7 @@ import aiohttp
 from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -133,6 +134,21 @@ async def answer_with_banner(
         return
 
     await message.answer(text, reply_markup=reply_markup)
+
+
+async def edit_or_answer(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    if message.photo:
+        await message.answer(text, reply_markup=reply_markup)
+        return
+
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest:
+        await message.answer(text, reply_markup=reply_markup)
 
 
 def format_usd(value: Decimal) -> str:
@@ -1689,49 +1705,49 @@ async def show_help(message: Message) -> None:
 @router.callback_query(F.data == "help:open")
 async def open_help(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(help_text(lang), reply_markup=help_keyboard(lang))
+    await edit_or_answer(callback.message, help_text(lang), reply_markup=help_keyboard(lang))
     await callback.answer()
 
 
 @router.callback_query(F.data == "support:open")
 async def open_support(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(support_text(lang), reply_markup=help_keyboard(lang))
+    await edit_or_answer(callback.message, support_text(lang), reply_markup=help_keyboard(lang))
     await callback.answer()
 
 
 @router.callback_query(F.data == "misc:open")
 async def open_misc(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(misc_text(lang), reply_markup=misc_keyboard(lang))
+    await edit_or_answer(callback.message, misc_text(lang), reply_markup=misc_keyboard(lang))
     await callback.answer()
 
 
 @router.callback_query(F.data == "misc:faq")
 async def open_faq(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(faq_text(lang), reply_markup=misc_keyboard(lang))
+    await edit_or_answer(callback.message, faq_text(lang), reply_markup=misc_keyboard(lang))
     await callback.answer()
 
 
 @router.callback_query(F.data == "misc:privacy")
 async def open_privacy(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(privacy_text(lang), reply_markup=misc_keyboard(lang))
+    await edit_or_answer(callback.message, privacy_text(lang), reply_markup=misc_keyboard(lang))
     await callback.answer()
 
 
 @router.callback_query(F.data == "misc:terms")
 async def open_terms(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(terms_text(lang), reply_markup=misc_keyboard(lang))
+    await edit_or_answer(callback.message, terms_text(lang), reply_markup=misc_keyboard(lang))
     await callback.answer()
 
 
 @router.callback_query(F.data == "misc:reviews")
 async def open_reviews(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(reviews_text(lang), reply_markup=misc_keyboard(lang))
+    await edit_or_answer(callback.message, reviews_text(lang), reply_markup=misc_keyboard(lang))
     await callback.answer()
 
 
@@ -1850,7 +1866,7 @@ async def open_home(callback: CallbackQuery, state: FSMContext) -> None:
 async def open_catalog(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     title = f"{ce('news_catalog')} Catalog:" if lang == "en" else f"{ce('news_catalog')} Каталог:"
-    await callback.message.edit_text(title, reply_markup=await catalog_keyboard(lang))
+    await edit_or_answer(callback.message, title, reply_markup=await catalog_keyboard(lang))
     await callback.answer()
 
 
@@ -1859,7 +1875,7 @@ async def open_product(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(selected_product_code=callback.data.split(":", 1)[1])
     lang = await get_lang(callback.from_user.id)
     product_code = callback.data.split(":", 1)[1]
-    await callback.message.edit_text(await product_text(lang, product_code), reply_markup=product_keyboard(lang, product_code))
+    await edit_or_answer(callback.message, await product_text(lang, product_code), reply_markup=product_keyboard(lang, product_code))
     await callback.answer()
 
 
@@ -1887,7 +1903,7 @@ async def profile_topup(callback: CallbackQuery, state: FSMContext) -> None:
         else "<b>Пополнение баланса</b>\n\n"
         "Отправьте сумму в рублях. Если настроены Platega и Crypto Bot, дальше выберете способ оплаты."
     )
-    await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await edit_or_answer(callback.message, text, reply_markup=profile_back_keyboard(lang))
     await callback.answer()
 
 
@@ -1993,7 +2009,7 @@ async def topup_method_placeholder(callback: CallbackQuery, state: FSMContext) -
         f"Сумма: <b>{amount} ₽</b>\n\n"
         "API этого способа оплаты будет подключен позже."
     )
-    await callback.message.edit_text(text, reply_markup=topup_payment_keyboard(amount, lang))
+    await edit_or_answer(callback.message, text, reply_markup=topup_payment_keyboard(amount, lang))
     await callback.answer()
 
 
@@ -2002,7 +2018,7 @@ async def cancel_topup(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
     await state.clear()
     text = "Top-up cancelled." if lang == "en" else "Пополнение отменено."
-    await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await edit_or_answer(callback.message, text, reply_markup=profile_back_keyboard(lang))
     await callback.answer()
 
 
@@ -2062,7 +2078,7 @@ async def check_platega_payment(callback: CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data == "profile:purchases")
 async def profile_purchases(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(
+    await edit_or_answer(callback.message,
         format_orders(await get_user_orders(callback.from_user.id), lang),
         reply_markup=profile_back_keyboard(lang),
     )
@@ -2073,7 +2089,7 @@ async def profile_purchases(callback: CallbackQuery) -> None:
 async def profile_promo(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     text = f"{ce('fire')} No active promo codes right now." if lang == "en" else f"{ce('fire')} Сейчас активных промокодов нет."
-    await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await edit_or_answer(callback.message, text, reply_markup=profile_back_keyboard(lang))
     await callback.answer()
 
 
@@ -2129,14 +2145,14 @@ async def payment_placeholder(callback: CallbackQuery) -> None:
             f"{ce('spark')} <b>{method_name}</b>\n\n"
             "Этот способ оплаты будет подключен позже. Пока можно оплатить балансом или написать в поддержку."
         )
-    await callback.message.edit_text(text, reply_markup=product_keyboard(lang))
+    await edit_or_answer(callback.message, text, reply_markup=product_keyboard(lang))
     await callback.answer()
 
 
 @router.callback_query(F.data == "profile:transactions")
 async def profile_transactions(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
-    await callback.message.edit_text(
+    await edit_or_answer(callback.message,
         format_transactions(await get_transactions(callback.from_user.id), lang),
         reply_markup=profile_back_keyboard(lang),
     )
@@ -2165,7 +2181,7 @@ async def profile_ref(callback: CallbackQuery, bot: Bot) -> None:
             "Приглашайте пользователей по своей ссылке. За каждых 5 приглашенных, "
             "которые сделают хотя бы одну покупку, вы получаете 1 Gemini Link в подарок."
         )
-    await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await edit_or_answer(callback.message, text, reply_markup=profile_back_keyboard(lang))
     await callback.answer()
 
 
@@ -2173,7 +2189,7 @@ async def profile_ref(callback: CallbackQuery, bot: Bot) -> None:
 async def profile_language(callback: CallbackQuery) -> None:
     lang = await get_lang(callback.from_user.id)
     current = "English" if lang == "en" else "Русский"
-    await callback.message.edit_text(
+    await edit_or_answer(callback.message,
         f"{ce('globe')} <b>Language / Язык</b>\n\nCurrent: <b>{current}</b>\n\nChoose language:",
         reply_markup=language_keyboard(),
     )
@@ -2190,7 +2206,7 @@ async def set_language(callback: CallbackQuery) -> None:
     await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     await update_user_language(callback.from_user.id, lang)
     text = f"{ce('ok')} Language changed to English." if lang == "en" else f"{ce('ok')} Язык изменён на русский."
-    await callback.message.edit_text(text, reply_markup=profile_back_keyboard(lang))
+    await edit_or_answer(callback.message, text, reply_markup=profile_back_keyboard(lang))
     await callback.message.answer(await home_text(lang, display_user_name(callback.from_user)), reply_markup=start_keyboard(lang))
     await callback.answer()
 
