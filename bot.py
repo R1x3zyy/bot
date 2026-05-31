@@ -36,6 +36,7 @@ from db import (
     complete_platega_payment,
     complete_crypto_payment,
     count_available_links,
+    create_order,
     create_balance_order,
     create_crypto_payment,
     create_platega_payment,
@@ -79,6 +80,18 @@ GEMINI_ACCOUNT_PRODUCT_CODE = "gemini_account_12_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
 PROFILE_BANNER_PATH = os.path.join(os.path.dirname(__file__), "assets", "profile_banner.png")
+PRODUCT_ALIASES = {
+    "link": PRODUCT_CODE,
+    "links": PRODUCT_CODE,
+    "geminilink": PRODUCT_CODE,
+    "gemini_link": PRODUCT_CODE,
+    "gpt": GPT_ACCOUNT_PRODUCT_CODE,
+    "chatgpt": GPT_ACCOUNT_PRODUCT_CODE,
+    "gptaccount": GPT_ACCOUNT_PRODUCT_CODE,
+    "gemini12": GEMINI_ACCOUNT_PRODUCT_CODE,
+    "gemini_account": GEMINI_ACCOUNT_PRODUCT_CODE,
+    "geminiacc": GEMINI_ACCOUNT_PRODUCT_CODE,
+}
 CE = {
     "gemini": ("5321197740800120767", "🤖"),
     "shop": ("5309801015015405183", "🎁"),
@@ -122,6 +135,12 @@ def product_icon(product_code: str) -> str:
     if "gpt" in product_code:
         return ce("shop")
     return ce("gemini")
+
+
+def resolve_product_code(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_")
+    normalized = normalized.replace(" ", "_")
+    return PRODUCT_ALIASES.get(normalized, normalized)
 
 
 async def answer_with_banner(
@@ -1060,7 +1079,14 @@ def reserved_text(lang: str = "ru") -> str:
     )
 
 
-async def deliver_order_links(message: Message, order_id: int, user_id: int, quantity: int, lang: str) -> list[dict]:
+async def deliver_order_links(
+    message: Message,
+    order_id: int,
+    user_id: int,
+    quantity: int,
+    lang: str,
+    with_review: bool = True,
+) -> list[dict]:
     links = await issue_links_to_order(order_id, user_id, quantity, "Выдан автоматически")
     if links is None:
         return []
@@ -1069,18 +1095,26 @@ async def deliver_order_links(message: Message, order_id: int, user_id: int, qua
         await message.answer(delivery_text(links, lang, product_code))
         caption = "Items as a file" if lang == "en" else "Товар файлом"
         await message.answer_document(delivery_file(order_id, links), caption=caption)
-        review_text = (
-            f"{ce('news_pencil')} How was your purchase? You can leave a review."
-            if lang == "en"
-            else f"{ce('news_pencil')} Как прошла покупка? Можете оставить отзыв."
-        )
-        await message.answer(review_text, reply_markup=review_prompt_keyboard(order_id, lang))
+        if with_review:
+            review_text = (
+                f"{ce('news_pencil')} How was your purchase? You can leave a review."
+                if lang == "en"
+                else f"{ce('news_pencil')} Как прошла покупка? Можете оставить отзыв."
+            )
+            await message.answer(review_text, reply_markup=review_prompt_keyboard(order_id, lang))
     else:
         await message.answer(reserved_text(lang))
     return links
 
 
-async def deliver_order_links_to_user(bot: Bot, chat_id: int, order_id: int, quantity: int, lang: str) -> list[dict]:
+async def deliver_order_links_to_user(
+    bot: Bot,
+    chat_id: int,
+    order_id: int,
+    quantity: int,
+    lang: str,
+    with_review: bool = True,
+) -> list[dict]:
     links = await issue_links_to_order(order_id, chat_id, quantity, "Выдан автоматически")
     if links is None:
         return []
@@ -1089,12 +1123,13 @@ async def deliver_order_links_to_user(bot: Bot, chat_id: int, order_id: int, qua
         await bot.send_message(chat_id, delivery_text(links, lang, product_code))
         caption = "Items as a file" if lang == "en" else "Товар файлом"
         await bot.send_document(chat_id, delivery_file(order_id, links), caption=caption)
-        review_text = (
-            f"{ce('news_pencil')} How was your purchase? You can leave a review."
-            if lang == "en"
-            else f"{ce('news_pencil')} Как прошла покупка? Можете оставить отзыв."
-        )
-        await bot.send_message(chat_id, review_text, reply_markup=review_prompt_keyboard(order_id, lang))
+        if with_review:
+            review_text = (
+                f"{ce('news_pencil')} How was your purchase? You can leave a review."
+                if lang == "en"
+                else f"{ce('news_pencil')} Как прошла покупка? Можете оставить отзыв."
+            )
+            await bot.send_message(chat_id, review_text, reply_markup=review_prompt_keyboard(order_id, lang))
     else:
         await bot.send_message(chat_id, reserved_text(lang))
     return links
@@ -1492,6 +1527,136 @@ async def day_stats(message: Message) -> None:
         f"Оборот в $ по выданным: <b>{data['revenue_usd']}$</b>\n"
         f"Закуп всего: <b>{data['cost_usd']}$</b>\n"
         f"Прибыль: <b>{data['profit_usd']}$</b>"
+    )
+
+
+@router.message(Command("giveitem"))
+async def give_item_command(message: Message, bot: Bot) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    parts = (message.text or "").split()
+    if len(parts) < 4:
+        await message.answer(
+            "Формат:\n"
+            "<code>/giveitem user_id товар количество</code>\n\n"
+            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>\n"
+            "Пример: <code>/giveitem 123456789 gpt 1</code>"
+        )
+        return
+
+    try:
+        target_user_id = int(parts[1])
+        quantity = int(parts[3])
+    except ValueError:
+        await message.answer("ID пользователя и количество должны быть числами.")
+        return
+
+    if quantity <= 0:
+        await message.answer("Количество должно быть больше 0.")
+        return
+
+    product_code = resolve_product_code(parts[2])
+    product = await get_product_config(product_code)
+    if not product:
+        await message.answer("Товар не найден. Используй: link, gpt или gemini12.")
+        return
+
+    stock = await count_available_links(product_code)
+    if stock < quantity:
+        await message.answer(f"Не хватает наличия. Сейчас доступно: <b>{stock}</b>.")
+        return
+
+    await ensure_user(target_user_id, "", "")
+    order_title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
+    order = await create_order(
+        user_id=target_user_id,
+        username="manual_admin_issue",
+        product_code=product_code,
+        product_title=order_title,
+        price_rub=0,
+        contact=f"manual:{message.from_user.id}",
+        status="Ожидает ручной выдачи",
+    )
+
+    target_lang = await get_lang(target_user_id)
+    try:
+        issued = await deliver_order_links_to_user(bot, target_user_id, order["id"], quantity, target_lang, with_review=False)
+    except Exception:
+        logging.exception("Could not manually deliver order %s to user %s", order["id"], target_user_id)
+        await message.answer(
+            f"Заказ #{order['id']} создан, но отправить пользователю не удалось. "
+            "Скорее всего, пользователь еще не писал боту или заблокировал его."
+        )
+        return
+
+    await message.answer(
+        f"{ce('ok')} Выдано пользователю <code>{target_user_id}</code>.\n"
+        f"Заказ: <b>#{order['id']}</b>\n"
+        f"Товар: <b>{product['title']}</b>\n"
+        f"Количество: <b>{len(issued)}</b>"
+    )
+
+
+@router.message(Command("takeitem"))
+async def take_item_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    parts = (message.text or "").split()
+    if len(parts) < 2:
+        await message.answer(
+            "Формат:\n"
+            "<code>/takeitem товар количество</code>\n\n"
+            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>\n"
+            "Пример: <code>/takeitem link 1</code>"
+        )
+        return
+
+    product_code = resolve_product_code(parts[1])
+    quantity = 1
+    if len(parts) >= 3:
+        try:
+            quantity = int(parts[2])
+        except ValueError:
+            await message.answer("Количество должно быть числом.")
+            return
+
+    if quantity <= 0:
+        await message.answer("Количество должно быть больше 0.")
+        return
+
+    product = await get_product_config(product_code)
+    if not product:
+        await message.answer("Товар не найден. Используй: link, gpt или gemini12.")
+        return
+
+    stock = await count_available_links(product_code)
+    if stock < quantity:
+        await message.answer(f"Не хватает наличия. Сейчас доступно: <b>{stock}</b>.")
+        return
+
+    await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    username = f"@{message.from_user.username}" if message.from_user.username else "admin"
+    order_title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
+    order = await create_order(
+        user_id=message.from_user.id,
+        username=username,
+        product_code=product_code,
+        product_title=order_title,
+        price_rub=0,
+        contact=f"admin_take:{message.from_user.id}",
+        status="Админ забрал товар",
+    )
+
+    lang = await get_lang(message.from_user.id)
+    issued = await deliver_order_links(message, order["id"], message.from_user.id, quantity, lang, with_review=False)
+    await message.answer(
+        f"{ce('ok')} Забрал из наличия: <b>{len(issued)}</b>\n"
+        f"Товар: <b>{product['title']}</b>\n"
+        f"Заказ: <b>#{order['id']}</b>"
     )
 
 
@@ -2803,6 +2968,8 @@ async def main() -> None:
                 BotCommand(command="stock", description="Остаток ссылок"),
                 BotCommand(command="stats", description="Статистика бота"),
                 BotCommand(command="daystats", description="Статистика за день"),
+                BotCommand(command="giveitem", description="Выдать товар пользователю"),
+                BotCommand(command="takeitem", description="Забрать товар себе"),
                 BotCommand(command="addlinks", description="Добавить ссылки"),
                 BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),
                 BotCommand(command="addgeminiaccounts", description="Добавить Gemini аккаунты"),
