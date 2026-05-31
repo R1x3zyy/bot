@@ -17,6 +17,7 @@ PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "1.50"))
 NEW_LINK_COST_USD = Decimal(os.getenv("NEW_LINK_COST_USD", "1.10"))
 REPORT_TZ = os.getenv("REPORT_TZ", "Europe/Moscow")
 DEFAULT_PRODUCT_CODE = "gemini_link_18_month"
+GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
 
 
 @contextmanager
@@ -355,6 +356,12 @@ async def channel_leave_stats(days: int = 14, limit: int = 50) -> dict:
     }
 
 
+def purchase_cost_for_product(product_code: str) -> Decimal:
+    if product_code == GPT_ACCOUNT_PRODUCT_CODE:
+        return Decimal("1.50")
+    return NEW_LINK_COST_USD
+
+
 async def add_links(links: list[str], product_code: str = DEFAULT_PRODUCT_CODE) -> int:
     clean_links = []
     for line in links:
@@ -370,9 +377,10 @@ async def add_links(links: list[str], product_code: str = DEFAULT_PRODUCT_CODE) 
 
     with get_conn() as conn:
         with conn.cursor() as cur:
+            purchase_cost = purchase_cost_for_product(product_code)
             cur.executemany(
                 "INSERT INTO links (url, product_code, purchase_cost_usd) VALUES (%s, %s, %s)",
-                [(link, product_code, NEW_LINK_COST_USD) for link in clean_links],
+                [(link, product_code, purchase_cost) for link in clean_links],
             )
     return len(clean_links)
 
