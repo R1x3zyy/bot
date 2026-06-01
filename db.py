@@ -180,10 +180,10 @@ async def ensure_schema() -> None:
             (
                 "gpt_account_full_warranty",
                 "GPT account full warranty",
-                Decimal("322.00"),
-                Decimal("4.50"),
+                Decimal("290.00"),
+                Decimal("4.00"),
                 (
-                    f"{'💰'} Цена: 4.50 USD\n"
+                    f"{'💰'} Цена: 4.00 USD\n"
                     f"{'⏳'} Срок действия: 30 дней\n"
                     f"{'🛡️'} Гарантия: полное сопровождение на 30 дней\n"
                     f"{'📦'} Доставка: READY_ACCOUNT\n\n"
