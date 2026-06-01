@@ -1237,12 +1237,12 @@ async def auto_payment_watcher(bot: Bot) -> None:
 async def quantity_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> str:
     product = await get_product_config(product_code)
     stock = await count_available_links(product_code)
-    price = int(product["price_rub"])
+    pricing = calculate_order_price(product, 1)
     if lang == "en":
         return (
             f"🔢 <b>Choose quantity</b>\n\n"
             f"{product_icon(product_code)} Product: <b>{product['title']}</b>\n"
-            f"{ce('news_money')} Price per item: <b>{price} ₽</b>\n"
+            f"{ce('news_money')} Price per item: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
             f"{ce('stock')} In stock: <b>{stock} pcs.</b>\n\n"
             "Choose quantity below or press <b>Custom quantity</b>."
         )
@@ -1250,7 +1250,7 @@ async def quantity_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> s
     return (
         f"🔢 <b>Выберите количество</b>\n\n"
         f"{product_icon(product_code)} Товар: <b>{product['title']}</b>\n"
-        f"{ce('news_money')} Цена за 1 шт.: <b>{price} ₽</b>\n"
+        f"{ce('news_money')} Цена за 1 шт.: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
         f"{ce('stock')} В наличии: <b>{stock} шт.</b>\n\n"
         "Выберите количество ниже или нажмите <b>Своё количество</b>."
     )
