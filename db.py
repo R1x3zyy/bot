@@ -239,6 +239,18 @@ async def get_user(user_id: int) -> dict | None:
         return conn.execute("SELECT * FROM users WHERE id = %s", (user_id,)).fetchone()
 
 
+async def get_user_by_username(username: str) -> dict | None:
+    normalized = username.strip().lstrip("@").lower()
+    if not normalized:
+        return None
+
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM users WHERE lower(username) = %s ORDER BY created_at DESC LIMIT 1",
+            (normalized,),
+        ).fetchone()
+
+
 async def update_user_language(user_id: int, language: str) -> dict | None:
     with get_conn() as conn:
         return conn.execute(

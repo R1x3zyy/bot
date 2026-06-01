@@ -50,6 +50,7 @@ from db import (
     list_product_configs,
     get_transactions,
     get_user,
+    get_user_by_username,
     get_user_orders,
     issue_links_to_order,
     list_active_crypto_payments,
@@ -1521,18 +1522,40 @@ async def give_item_command(message: Message, bot: Bot) -> None:
     if len(parts) < 4:
         await message.answer(
             "Формат:\n"
-            "<code>/giveitem user_id товар количество</code>\n\n"
+            "<code>/giveitem user_id товар количество</code>\n"
+            "<code>/giveitem @username товар количество</code>\n\n"
             "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>\n"
-            "Пример: <code>/giveitem 123456789 gpt 1</code>"
+            "Пример: <code>/giveitem @username link 1</code>"
         )
         return
 
     try:
-        target_user_id = int(parts[1])
         quantity = int(parts[3])
     except ValueError:
-        await message.answer("ID пользователя и количество должны быть числами.")
+        await message.answer("Количество должно быть числом.")
         return
+
+    target = parts[1].strip()
+    target_username = ""
+    if target.startswith("@"):
+        target_user = await get_user_by_username(target)
+        if not target_user:
+            await message.answer(
+                "Пользователь не найден в базе бота.\n\n"
+                "Он должен хотя бы один раз написать /start боту, после этого можно выдавать по @username."
+            )
+            return
+        target_user_id = int(target_user["id"])
+        target_username = f"@{target_user['username']}" if target_user["username"] else target
+    else:
+        try:
+            target_user_id = int(target)
+        except ValueError:
+            await message.answer("Укажите пользователя как ID или @username.")
+            return
+        target_user = await get_user(target_user_id)
+        if target_user and target_user["username"]:
+            target_username = f"@{target_user['username']}"
 
     if quantity <= 0:
         await message.answer("Количество должно быть больше 0.")
@@ -1549,12 +1572,15 @@ async def give_item_command(message: Message, bot: Bot) -> None:
         await message.answer(f"Не хватает наличия. Сейчас доступно: <b>{stock}</b>.")
         return
 
-    await ensure_user(target_user_id, "", "")
+    if target_username:
+        await ensure_user(target_user_id, target_username.lstrip("@"), "")
+    else:
+        await ensure_user(target_user_id, "", "")
     order_title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
     pricing = calculate_order_price(product, quantity)
     order = await create_order(
         user_id=target_user_id,
-        username="manual_admin_issue",
+        username=target_username or "manual_admin_issue",
         product_code=product_code,
         product_title=order_title,
         price_rub=int(pricing["total_rub"]),
@@ -1574,7 +1600,7 @@ async def give_item_command(message: Message, bot: Bot) -> None:
         return
 
     await message.answer(
-        f"{ce('ok')} Выдано пользователю <code>{target_user_id}</code>.\n"
+        f"{ce('ok')} Выдано пользователю <code>{target_username or target_user_id}</code>.\n"
         f"Заказ: <b>#{order['id']}</b>\n"
         f"Товар: <b>{product['title']}</b>\n"
         f"Количество: <b>{len(issued)}</b>\n"
