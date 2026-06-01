@@ -855,9 +855,11 @@ async def daily_business_stats() -> dict:
             LEFT JOIN orders
                 ON (orders.created_at AT TIME ZONE %s)::date = today.day
                 AND orders.status <> 'Отменен'
+                AND orders.price_rub > 0
+                AND (%s = '' OR orders.user_id IS DISTINCT FROM %s::bigint)
             GROUP BY today.day
             """,
-            (REPORT_TZ, REPORT_TZ),
+            (REPORT_TZ, REPORT_TZ, ADMIN_ID, ADMIN_ID or "0"),
         ).fetchone()
         orders = conn.execute(
             """
@@ -869,8 +871,10 @@ async def daily_business_stats() -> dict:
             LEFT JOIN product_settings ON product_settings.code = orders.product_code
             WHERE (orders.created_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
                 AND orders.status <> 'Отменен'
+                AND orders.price_rub > 0
+                AND (%s = '' OR orders.user_id IS DISTINCT FROM %s::bigint)
             """,
-            (REPORT_TZ, REPORT_TZ),
+            (REPORT_TZ, REPORT_TZ, ADMIN_ID, ADMIN_ID or "0"),
         ).fetchall()
         issued_summary = conn.execute(
             """
