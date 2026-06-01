@@ -181,6 +181,9 @@ def calculate_order_price(product: dict, quantity: int) -> dict[str, Decimal | i
     base_usd = Decimal(str(product["price_usd"]))
     unit_usd = base_usd
 
+    if product.get("code") == PRODUCT_CODE and quantity >= 10:
+        unit_usd = Decimal("1.5")
+
     if base_usd > 0:
         unit_rub = (base_rub / base_usd * unit_usd).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     else:
@@ -1258,11 +1261,23 @@ async def quantity_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> s
     product = await get_product_config(product_code)
     stock = await count_available_links(product_code)
     pricing = calculate_order_price(product, 1)
+    tier_10 = calculate_order_price(product, 10)
+    wholesale_en = (
+        f"{ce('fire')} Wholesale from <b>10 pcs.</b>: <b>{tier_10['unit_rub']} ₽ / {format_usd(tier_10['unit_usd'])}$</b>\n"
+        if product_code == PRODUCT_CODE
+        else ""
+    )
+    wholesale_ru = (
+        f"{ce('fire')} Опт от <b>10 шт.</b>: <b>{tier_10['unit_rub']} ₽ / {format_usd(tier_10['unit_usd'])}$</b>\n"
+        if product_code == PRODUCT_CODE
+        else ""
+    )
     if lang == "en":
         return (
             f"🔢 <b>Choose quantity</b>\n\n"
             f"{product_icon(product_code)} Product: <b>{product['title']}</b>\n"
             f"{ce('news_money')} Price per item: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
+            f"{wholesale_en}"
             f"{ce('stock')} In stock: <b>{stock} pcs.</b>\n\n"
             "Choose quantity below or press <b>Custom quantity</b>."
         )
@@ -1271,6 +1286,7 @@ async def quantity_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> s
         f"🔢 <b>Выберите количество</b>\n\n"
         f"{product_icon(product_code)} Товар: <b>{product['title']}</b>\n"
         f"{ce('news_money')} Цена за 1 шт.: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
+        f"{wholesale_ru}"
         f"{ce('stock')} В наличии: <b>{stock} шт.</b>\n\n"
         "Выберите количество ниже или нажмите <b>Своё количество</b>."
     )
