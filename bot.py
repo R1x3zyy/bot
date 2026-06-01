@@ -497,10 +497,14 @@ def product_keyboard(lang: str = "ru", product_code: str = PRODUCT_CODE) -> Inli
     if lang == "en":
         buttons = [
             [InlineKeyboardButton(text="🛒 Buy", callback_data=f"buy:start:{product_code}")],
+            [InlineKeyboardButton(text="⬅️ Back to catalog", callback_data="catalog:open")],
+            [InlineKeyboardButton(text="🏠 Main menu", callback_data="menu:home")],
         ]
     else:
         buttons = [
             [InlineKeyboardButton(text="🛒 Купить", callback_data=f"buy:start:{product_code}")],
+            [InlineKeyboardButton(text="⬅️ Назад в каталог", callback_data="catalog:open")],
+            [InlineKeyboardButton(text="🏠 В меню", callback_data="menu:home")],
         ]
 
     return InlineKeyboardMarkup(
@@ -2557,13 +2561,15 @@ async def select_quantity(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "buy:custom")
 async def ask_custom_quantity(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
+    data = await state.get_data()
+    product_code = data.get("bulk_product_code") or PRODUCT_CODE
     await state.set_state(BulkOrderState.waiting_for_quantity)
     text = (
         f"{ce('cart')} Send a number with how many items you want to buy."
         if lang == "en"
         else f"{ce('cart')} Отправьте числом, сколько штук хотите купить."
     )
-    await callback.message.answer(text)
+    await callback.message.answer(text, reply_markup=quantity_keyboard(lang, product_code))
     await callback.answer()
 
 
@@ -2574,12 +2580,14 @@ async def receive_bulk_quantity(message: Message, state: FSMContext, bot: Bot) -
     raw_quantity = (message.text or "").strip()
 
     if not raw_quantity.isdigit():
+        data = await state.get_data()
+        product_code = data.get("bulk_product_code") or PRODUCT_CODE
         text = (
             "Send only a whole number, for example: <b>2</b>."
             if lang == "en"
             else "Отправьте только целое число, например: <b>2</b>."
         )
-        await message.answer(text)
+        await message.answer(text, reply_markup=quantity_keyboard(lang, product_code))
         return
 
     quantity = int(raw_quantity)
