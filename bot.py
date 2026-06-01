@@ -665,7 +665,6 @@ def misc_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=channel_text, url="https://t.me/r1x3zyyshop"),
                 InlineKeyboardButton(text=reviews_text, callback_data="misc:reviews"),
             ],
-            [InlineKeyboardButton(text="❓ FAQ", callback_data="misc:faq")],
             [InlineKeyboardButton(text=privacy_text, callback_data="misc:privacy")],
             [InlineKeyboardButton(text=terms_text, callback_data="misc:terms")],
             [InlineKeyboardButton(text=back_text, callback_data="menu:home")],
