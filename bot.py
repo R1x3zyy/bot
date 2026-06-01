@@ -2561,15 +2561,13 @@ async def select_quantity(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "buy:custom")
 async def ask_custom_quantity(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
-    data = await state.get_data()
-    product_code = data.get("bulk_product_code") or PRODUCT_CODE
     await state.set_state(BulkOrderState.waiting_for_quantity)
     text = (
         f"{ce('cart')} Send a number with how many items you want to buy."
         if lang == "en"
         else f"{ce('cart')} Отправьте числом, сколько штук хотите купить."
     )
-    await callback.message.answer(text, reply_markup=quantity_keyboard(lang, product_code))
+    await callback.message.answer(text)
     await callback.answer()
 
 
