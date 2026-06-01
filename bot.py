@@ -1551,12 +1551,13 @@ async def give_item_command(message: Message, bot: Bot) -> None:
 
     await ensure_user(target_user_id, "", "")
     order_title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
+    pricing = calculate_order_price(product, quantity)
     order = await create_order(
         user_id=target_user_id,
         username="manual_admin_issue",
         product_code=product_code,
         product_title=order_title,
-        price_rub=0,
+        price_rub=int(pricing["total_rub"]),
         contact=f"manual:{message.from_user.id}",
         status="Ожидает ручной выдачи",
     )
@@ -1576,7 +1577,8 @@ async def give_item_command(message: Message, bot: Bot) -> None:
         f"{ce('ok')} Выдано пользователю <code>{target_user_id}</code>.\n"
         f"Заказ: <b>#{order['id']}</b>\n"
         f"Товар: <b>{product['title']}</b>\n"
-        f"Количество: <b>{len(issued)}</b>"
+        f"Количество: <b>{len(issued)}</b>\n"
+        f"Сумма в статистике: <b>{int(pricing['total_rub'])} ₽</b>"
     )
 
 
