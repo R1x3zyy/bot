@@ -59,6 +59,7 @@ from db import (
     record_channel_membership_event,
     record_bot_visit,
     update_user_language,
+    update_product_config,
 )
 
 
@@ -328,6 +329,10 @@ class BroadcastState(StatesGroup):
     waiting_for_text = State()
 
 
+class PriceState(StatesGroup):
+    waiting_for_price = State()
+
+
 router = Router()
 
 
@@ -559,6 +564,21 @@ def bulk_payment_keyboard(quantity: int, lang: str = "ru") -> InlineKeyboardMark
             [InlineKeyboardButton(text="Отмена", callback_data="bulk:cancel")],
         ]
 
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+async def admin_price_products_keyboard() -> InlineKeyboardMarkup:
+    products = await list_product_configs()
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{product_icon(product['code'])} {product['title']} | {format_price(product)}",
+                callback_data=f"admin:price:{product['code']}",
+            )
+        ]
+        for product in products
+    ]
+    buttons.append([InlineKeyboardButton(text="Отмена", callback_data="admin:price:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -1666,6 +1686,104 @@ async def take_item_command(message: Message) -> None:
         f"{ce('ok')} Забрал из наличия: <b>{len(issued)}</b>\n"
         f"Товар: <b>{product['title']}</b>\n"
         f"Заказ: <b>#{order['id']}</b>"
+    )
+
+
+@router.message(Command("setprice"))
+async def set_price_command(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    await state.clear()
+    await message.answer(
+        "Выберите товар, у которого нужно поменять цену:",
+        reply_markup=await admin_price_products_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "admin:price:cancel")
+async def cancel_set_price(callback: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Недоступно", show_alert=True)
+        return
+
+    await state.clear()
+    await callback.message.answer("Изменение цены отменено.")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:price:"))
+async def choose_product_price(callback: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Недоступно", show_alert=True)
+        return
+
+    product_code = callback.data.split(":", 2)[2]
+    product = await get_product_config(product_code)
+    if not product:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+
+    await state.set_state(PriceState.waiting_for_price)
+    await state.update_data(price_product_code=product_code)
+    await callback.message.answer(
+        f"Товар: <b>{product['title']}</b>\n"
+        f"Сейчас: <b>{format_price(product)}</b>\n\n"
+        "Отправьте новую цену в формате:\n"
+        "<code>116 1.6</code>\n\n"
+        "Где первое число — цена в рублях, второе — цена в долларах."
+    )
+    await callback.answer()
+
+
+@router.message(PriceState.waiting_for_price)
+async def receive_product_price(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    data = await state.get_data()
+    product_code = data.get("price_product_code")
+    product = await get_product_config(product_code)
+    if not product:
+        await state.clear()
+        await message.answer("Товар не найден. Запустите /setprice заново.")
+        return
+
+    raw = (message.text or "").strip().replace(",", ".")
+    parts = [part for part in re.split(r"[\s/|;]+", raw) if part]
+    if len(parts) != 2:
+        await message.answer(
+            "Нужно отправить две цены: рубли и доллары.\n"
+            "Пример: <code>116 1.6</code>"
+        )
+        return
+
+    try:
+        price_rub = Decimal(parts[0]).quantize(Decimal("0.01"))
+        price_usd = Decimal(parts[1]).quantize(Decimal("0.01"))
+    except Exception:
+        await message.answer("Не получилось прочитать цену. Пример: <code>116 1.6</code>")
+        return
+
+    if price_rub <= 0 or price_usd <= 0:
+        await message.answer("Цена должна быть больше нуля.")
+        return
+
+    updated = await update_product_config(
+        code=product["code"],
+        title=product["title"],
+        price_rub=price_rub,
+        price_usd=price_usd,
+        description=product["description"],
+    )
+    await state.clear()
+    await message.answer(
+        f"{ce('ok')} Цена обновлена.\n\n"
+        f"Товар: <b>{updated['title']}</b>\n"
+        f"Новая цена: <b>{format_price(updated)}</b>"
     )
 
 
@@ -2979,6 +3097,7 @@ async def main() -> None:
                 BotCommand(command="daystats", description="Статистика за день"),
                 BotCommand(command="giveitem", description="Выдать товар пользователю"),
                 BotCommand(command="takeitem", description="Забрать товар себе"),
+                BotCommand(command="setprice", description="Поменять цену товара"),
                 BotCommand(command="addlinks", description="Добавить ссылки"),
                 BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),
                 BotCommand(command="addgeminiaccounts", description="Добавить Gemini аккаунты"),
