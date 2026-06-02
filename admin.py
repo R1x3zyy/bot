@@ -18,6 +18,7 @@ from bot import notify_paid_payment, payment_username
 from db import (
     add_links,
     admin_stats,
+    business_stats_by_days,
     complete_crypto_payment,
     complete_platega_payment,
     channel_leave_stats,
@@ -205,6 +206,12 @@ async def stats(_: str = Depends(check_auth)) -> dict:
 @app.get("/api/business/day")
 async def business_day(_: str = Depends(check_auth)) -> dict:
     return clean_row(await daily_business_stats())
+
+
+@app.get("/api/business/days")
+async def business_days(days: int = 30, _: str = Depends(check_auth)) -> list[dict]:
+    safe_days = max(1, min(days, 90))
+    return [clean_row(row) for row in await business_stats_by_days(safe_days)]
 
 
 @app.get("/api/visits")

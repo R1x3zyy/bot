@@ -973,6 +973,94 @@ async def daily_business_stats() -> dict:
     }
 
 
+async def business_stats_by_days(days: int = 30) -> list[dict]:
+    safe_days = max(1, min(days, 90))
+    with get_conn() as conn:
+        date_rows = conn.execute(
+            """
+            SELECT generate_series(
+                (now() AT TIME ZONE %s)::date - (%s::int - 1),
+                (now() AT TIME ZONE %s)::date,
+                INTERVAL '1 day'
+            )::date AS day
+            ORDER BY day DESC
+            """,
+            (REPORT_TZ, safe_days, REPORT_TZ),
+        ).fetchall()
+        order_rows = conn.execute(
+            """
+            SELECT
+                (orders.created_at AT TIME ZONE %s)::date AS day,
+                orders.price_rub,
+                product_settings.price_rub AS product_price_rub,
+                product_settings.price_usd AS product_price_usd
+            FROM orders
+            LEFT JOIN product_settings ON product_settings.code = orders.product_code
+            WHERE (orders.created_at AT TIME ZONE %s)::date >= (now() AT TIME ZONE %s)::date - (%s::int - 1)
+                AND orders.status <> 'Отменен'
+                AND orders.price_rub > 0
+                AND (%s = '' OR orders.user_id IS DISTINCT FROM %s::bigint)
+            """,
+            (REPORT_TZ, REPORT_TZ, REPORT_TZ, safe_days, ADMIN_ID, ADMIN_ID or "0"),
+        ).fetchall()
+        issued_rows = conn.execute(
+            """
+            SELECT
+                (issued_at AT TIME ZONE %s)::date AS day,
+                count(*)::int AS count,
+                COALESCE(sum(purchase_cost_usd), 0) AS cost_usd
+            FROM links
+            WHERE is_issued = TRUE
+                AND issued_at IS NOT NULL
+                AND (issued_at AT TIME ZONE %s)::date >= (now() AT TIME ZONE %s)::date - (%s::int - 1)
+                AND (%s = '' OR issued_to IS DISTINCT FROM %s::bigint)
+            GROUP BY day
+            """,
+            (REPORT_TZ, REPORT_TZ, REPORT_TZ, safe_days, ADMIN_ID, ADMIN_ID or "0"),
+        ).fetchall()
+
+    stats = {
+        row["day"]: {
+            "date": row["day"],
+            "orders_count": 0,
+            "revenue_rub": Decimal("0"),
+            "issued_links": 0,
+            "revenue_usd": Decimal("0"),
+            "cost_usd": Decimal("0"),
+            "profit_usd": Decimal("0"),
+            "cost_per_link_usd": Decimal("0"),
+        }
+        for row in date_rows
+    }
+
+    for order in order_rows:
+        day = order["day"]
+        if day not in stats:
+            continue
+        price_rub = Decimal(order["product_price_rub"] or 0)
+        price_usd = Decimal(order["product_price_usd"] or 0)
+        revenue_rub = Decimal(order["price_rub"] or 0)
+        stats[day]["orders_count"] += 1
+        stats[day]["revenue_rub"] += revenue_rub
+        if price_rub > 0:
+            stats[day]["revenue_usd"] += (revenue_rub / price_rub) * price_usd
+
+    for issued in issued_rows:
+        day = issued["day"]
+        if day not in stats:
+            continue
+        stats[day]["issued_links"] = issued["count"]
+        stats[day]["cost_usd"] = Decimal(issued["cost_usd"] or 0)
+
+    for day_stats in stats.values():
+        issued_links = day_stats["issued_links"]
+        cost_usd = day_stats["cost_usd"]
+        day_stats["profit_usd"] = day_stats["revenue_usd"] - cost_usd
+        day_stats["cost_per_link_usd"] = cost_usd / issued_links if issued_links else Decimal("0")
+
+    return list(stats.values())
+
+
 async def recent_orders(limit: int = 20) -> list[dict]:
     with get_conn() as conn:
         return conn.execute("SELECT * FROM orders ORDER BY created_at DESC LIMIT %s", (limit,)).fetchall()

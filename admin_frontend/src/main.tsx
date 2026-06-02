@@ -161,6 +161,7 @@ function App() {
   const [productCode, setProductCode] = useState(PRODUCT_OPTIONS[0].code);
   const [stats, setStats] = useState<Stats>({ users: 0, orders: 0, links: 0 });
   const [businessDay, setBusinessDay] = useState<BusinessDay | null>(null);
+  const [businessDays, setBusinessDays] = useState<BusinessDay[]>([]);
   const [visits, setVisits] = useState<VisitPoint[]>([]);
   const [channelLeaves, setChannelLeaves] = useState<ChannelLeaves | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -197,9 +198,10 @@ function App() {
     setLoading(true);
     setMessage('');
     try {
-      const [nextStats, nextBusinessDay, nextVisits, nextChannelLeaves, nextOrders, nextUsers, nextLinks, nextLinksSummary, nextProduct] = await Promise.all([
+      const [nextStats, nextBusinessDay, nextBusinessDays, nextVisits, nextChannelLeaves, nextOrders, nextUsers, nextLinks, nextLinksSummary, nextProduct] = await Promise.all([
         request<Stats>('/api/stats'),
         request<BusinessDay>('/api/business/day'),
+        request<BusinessDay[]>('/api/business/days?days=30'),
         request<VisitPoint[]>('/api/visits?days=14'),
         request<ChannelLeaves>('/api/channel/leaves?days=14'),
         request<Order[]>('/api/orders'),
@@ -210,6 +212,7 @@ function App() {
       ]);
       setStats(nextStats);
       setBusinessDay(nextBusinessDay);
+      setBusinessDays(nextBusinessDays);
       setVisits(nextVisits);
       setChannelLeaves(nextChannelLeaves);
       setOrders(nextOrders);
@@ -410,6 +413,46 @@ function App() {
           </p>
         </section>
       )}
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>
+            <BarChart3 size={20} />
+            Статистика по дням
+          </h2>
+          <span className="muted-label">последние 30 дней</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Заказы</th>
+                <th>Оборот</th>
+                <th>Выдано</th>
+                <th>Выручка $</th>
+                <th>Закуп $</th>
+                <th>Прибыль $</th>
+              </tr>
+            </thead>
+            <tbody>
+              {businessDays.map((day) => (
+                <tr key={day.date}>
+                  <td>{day.date}</td>
+                  <td>{day.orders_count}</td>
+                  <td>{Number(day.revenue_rub).toFixed(0)} ₽</td>
+                  <td>{day.issued_links}</td>
+                  <td>${Number(day.revenue_usd).toFixed(2)}</td>
+                  <td>${Number(day.cost_usd).toFixed(2)}</td>
+                  <td>
+                    <strong>${Number(day.profit_usd).toFixed(2)}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="panel visits-panel">
         <div className="panel-heading">
