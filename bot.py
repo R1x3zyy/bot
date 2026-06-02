@@ -775,26 +775,24 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
     if lang == "en":
         return (
             f"{ce('spark')} <b>Welcome to the store{greeting_name}!</b>\n\n"
-            f"{ce('gemini')} <b>Available product:</b>\n"
+            f"{ce('gemini')} <b>Products:</b>\n"
             "<blockquote>"
             + "\n".join(product_lines) +
             "</blockquote>\n\n"
-            f"{ce('fire')} <b>Why choose us:</b>\n"
-            f"{ce('news_bolt')} Fast delivery · {ce('news_money')} Easy top-up · {ce('ok')} Warranty · {ce('support')} {SUPPORT_USERNAME}\n\n"
+            f"{ce('fire')} <b>Benefits:</b> {ce('news_bolt')} Fast delivery · {ce('news_money')} Easy payment · {ce('ok')} Warranty · {ce('support')} {SUPPORT_USERNAME}\n\n"
             f"{ce('stock')} <b>In stock:</b> {total_stock}\n\n"
-            "Choose an action below:"
+            "Choose an action:"
         )
 
     return (
         f"{ce('spark')} <b>Добро пожаловать в магазин{greeting_name}!</b>\n\n"
-        f"{ce('shop')} <b>В нашем магазине вы можете приобрести:</b>\n"
+        f"{ce('shop')} <b>Товары:</b>\n"
         "<blockquote>"
         + "\n".join(product_lines) +
         "</blockquote>\n\n"
-        f"{ce('fire')} <b>Наши преимущества:</b>\n"
-        f"{ce('news_bolt')} Быстрая выдача · {ce('news_money')} Удобная оплата · {ce('ok')} Гарантия · {ce('support')} {SUPPORT_USERNAME}\n\n"
+        f"{ce('fire')} <b>Плюсы:</b> {ce('news_bolt')} Быстрая выдача · {ce('news_money')} Удобная оплата · {ce('ok')} Гарантия · {ce('support')} {SUPPORT_USERNAME}\n\n"
         f"{ce('stock')} <b>Сейчас в наличии:</b> {total_stock}\n\n"
-        "Выберите действие ниже:"
+        "Выберите действие:"
     )
 
 
