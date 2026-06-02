@@ -25,7 +25,6 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
-    ReplyKeyboardRemove,
     TelegramObject,
 )
 from dotenv import load_dotenv
@@ -427,7 +426,10 @@ class SubscriptionMiddleware(BaseMiddleware):
 
         lang = await get_lang(user.id)
         if isinstance(event, CallbackQuery):
-            await event.answer("Подпишитесь на канал, чтобы продолжить.", show_alert=True)
+            try:
+                await event.answer("Подпишитесь на канал, чтобы продолжить.", show_alert=True)
+            except TelegramBadRequest:
+                logging.exception("Could not answer old subscription callback")
             await event.message.answer(subscription_text(lang), reply_markup=subscription_keyboard(lang))
         elif isinstance(event, Message):
             await event.answer(subscription_text(lang), reply_markup=subscription_keyboard(lang))
@@ -1436,11 +1438,6 @@ async def show_payment_methods_for_quantity(message: Message, state: FSMContext,
 async def start(message: Message) -> None:
     user = await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     lang = user["language"] if user["language"] in {"ru", "en"} else "ru"
-    cleanup = await message.answer("Меню обновлено.", reply_markup=ReplyKeyboardRemove())
-    try:
-        await cleanup.delete()
-    except Exception:
-        logging.exception("Could not delete reply keyboard cleanup message")
     await answer_with_banner(
         message,
         await home_text(lang, display_user_name(message.from_user)),
