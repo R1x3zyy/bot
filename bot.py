@@ -83,6 +83,7 @@ PLATEGA_API_URL = os.getenv("PLATEGA_API_URL", "https://app.platega.io")
 PRODUCT_CODE = "gemini_link_18_month"
 GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
 GEMINI_ACCOUNT_PRODUCT_CODE = "gemini_account_12_month"
+SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
 SUPPORT_USERNAME = "@R1x3zyy"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
 PROFILE_BANNER_PATH = os.path.join(os.path.dirname(__file__), "assets", "profile_banner.png")
@@ -97,6 +98,10 @@ PRODUCT_ALIASES = {
     "gemini12": GEMINI_ACCOUNT_PRODUCT_CODE,
     "gemini_account": GEMINI_ACCOUNT_PRODUCT_CODE,
     "geminiacc": GEMINI_ACCOUNT_PRODUCT_CODE,
+    "grok": SUPERGROK_PRODUCT_CODE,
+    "supergrok": SUPERGROK_PRODUCT_CODE,
+    "super_grok": SUPERGROK_PRODUCT_CODE,
+    "supergrok_account": SUPERGROK_PRODUCT_CODE,
 }
 CE = {
     "gemini": ("5321197740800120767", "🤖"),
@@ -123,6 +128,7 @@ CE = {
     "news_gear": ("5341715473882955310", "⚙️"),
     "news_pencil": ("5395444784611480792", "✏️"),
     "news_info": ("5334544901428229844", "ℹ️"),
+    "grok": ("5325547803936572038", "✦"),
 }
 
 
@@ -138,9 +144,19 @@ def format_price(product: dict) -> str:
 
 
 def product_icon(product_code: str) -> str:
+    if "grok" in product_code:
+        return ce("grok")
     if "gpt" in product_code:
         return ce("shop")
     return ce("gemini")
+
+
+def product_button_icon(product_code: str) -> str:
+    if "grok" in product_code:
+        return "✦"
+    if "gpt" in product_code:
+        return "🛍"
+    return "💠"
 
 
 def resolve_product_code(value: str) -> str:
@@ -497,7 +513,7 @@ async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         price = format_price(product)
         rows.append([
             InlineKeyboardButton(
-                text=f"🛍 {product['title']} | {price} | {stock} {item_suffix}",
+                text=f"{product_button_icon(product['code'])} {product['title']} | {price} | {stock} {item_suffix}",
                 callback_data=f"product:{product['code']}",
             )
         ])
@@ -593,7 +609,7 @@ async def admin_price_products_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(
-                text=f"{product_icon(product['code'])} {product['title']} | {format_price(product)}",
+                text=f"{product_button_icon(product['code'])} {product['title']} | {format_price(product)}",
                 callback_data=f"admin:price:{product['code']}",
             )
         ]
@@ -1087,8 +1103,28 @@ def gpt_account_notice(lang: str = "ru") -> str:
     )
 
 
+def supergrok_account_notice(lang: str = "ru") -> str:
+    if lang == "en":
+        return (
+            f"\n\n{ce('grok')} <b>SUPERGROK instructions:</b>\n"
+            "Use the email and password exactly as provided. Do not change the email, password, or enable 2FA. "
+            "If you have any login issue, contact support before making changes."
+        )
+
+    return (
+        f"\n\n{ce('grok')} <b>Инструкция SUPERGROK:</b>\n"
+        "Используйте email и пароль строго в том виде, в котором они выданы. Не меняйте email, пароль и не включайте 2FA. "
+        "Если возникла проблема со входом, сначала напишите в поддержку и не вносите изменения самостоятельно."
+    )
+
+
 def delivery_text(links: list[dict], lang: str = "ru", product_code: str = "") -> str:
-    notice = gpt_account_notice(lang) if product_code == GPT_ACCOUNT_PRODUCT_CODE else ""
+    if product_code == GPT_ACCOUNT_PRODUCT_CODE:
+        notice = gpt_account_notice(lang)
+    elif product_code == SUPERGROK_PRODUCT_CODE:
+        notice = supergrok_account_notice(lang)
+    else:
+        notice = ""
     if len(links) == 1:
         url = html.escape(str(links[0]["url"]))
         return (
@@ -1973,6 +2009,17 @@ async def add_gemini_accounts_command(message: Message, state: FSMContext) -> No
         GEMINI_ACCOUNT_PRODUCT_CODE,
         "Gemini-аккаунтов",
         "mail1@gmail.com:password",
+    )
+
+
+@router.message(Command("addgrokaccounts"))
+async def add_grok_accounts_command(message: Message, state: FSMContext) -> None:
+    await add_accounts_command(
+        message,
+        state,
+        SUPERGROK_PRODUCT_CODE,
+        "SUPERGROK-аккаунтов",
+        "mail1@outlook.com:password",
     )
 
 
@@ -3285,6 +3332,7 @@ async def main() -> None:
                 BotCommand(command="addlinks", description="Добавить ссылки"),
                 BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),
                 BotCommand(command="addgeminiaccounts", description="Добавить Gemini аккаунты"),
+                BotCommand(command="addgrokaccounts", description="Добавить SUPERGROK аккаунты"),
                 BotCommand(command="broadcast", description="Рассылка"),
             ],
             scope=BotCommandScopeChat(chat_id=int(ADMIN_ID)),

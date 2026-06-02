@@ -21,6 +21,7 @@ if not ADMIN_ID.isdigit():
     ADMIN_ID = ""
 DEFAULT_PRODUCT_CODE = "gemini_link_18_month"
 GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
+SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
 
 
 @contextmanager
@@ -206,6 +207,29 @@ async def ensure_schema() -> None:
                     f"{'📦'} Доставка: READY_ACCOUNT\n\n"
                     "Готовый аккаунт Gemini с активным доступом на 12 месяцев. После оплаты выдаются данные для входа "
                     "и вся информация, которая нужна для использования аккаунта."
+                ),
+            ),
+            (
+                SUPERGROK_PRODUCT_CODE,
+                "SUPERGROK 1 month [25 дней ГАРАНТИЯ]",
+                Decimal("290.00"),
+                Decimal("4.00"),
+                (
+                    f"{'💰'} Цена: 4.00 USD\n"
+                    f"{'⏳'} Срок действия: 1 месяц\n"
+                    f"{'🛡️'} Гарантия: 25 дней\n"
+                    f"{'📦'} Доставка: READY_ACCOUNT\n\n"
+                    "Что входит в комплект:\n"
+                    "- email для входа;\n"
+                    "- пароль;\n"
+                    "- мгновенная выдача после покупки;\n"
+                    "- готовый доступ к аккаунту.\n\n"
+                    "Важные инструкции:\n"
+                    "- используйте email и пароль строго в том виде, в котором они выданы;\n"
+                    "- не меняйте email;\n"
+                    "- не меняйте пароль;\n"
+                    "- не добавляйте и не включайте 2FA;\n"
+                    "- если возникла проблема со входом или аккаунтом, сначала напишите в поддержку и не вносите изменения самостоятельно."
                 ),
             ),
         ]
@@ -1137,6 +1161,7 @@ async def list_product_configs() -> list[dict]:
                     WHEN 'gemini_link_18_month' THEN 1
                     WHEN 'gpt_account_full_warranty' THEN 2
                     WHEN 'gemini_account_12_month' THEN 3
+                    WHEN 'supergrok_1_month' THEN 4
                     ELSE 10
                 END,
                 title
