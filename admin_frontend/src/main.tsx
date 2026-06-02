@@ -429,7 +429,7 @@ function App() {
         </section>
       )}
 
-      <section className="panel">
+      <section className="panel daily-panel">
         <div className="panel-heading">
           <h2>
             <BarChart3 size={20} />
