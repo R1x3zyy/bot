@@ -143,6 +143,21 @@ def format_price(product: dict) -> str:
     return f"{price_rub} ₽ / {price_usd:g} $"
 
 
+def format_usd_price(product: dict) -> str:
+    return f"{float(product['price_usd']):g} USD"
+
+
+def product_description(product: dict, lang: str = "ru") -> str:
+    description = str(product["description"])
+    price_line = f"💰 Price: {format_usd_price(product)}" if lang == "en" else f"💰 Цена: {format_usd_price(product)}"
+    return re.sub(
+        r"(?m)^[^\n]*(?:Цена|Price):\s*\d+(?:[.,]\d+)?\s*(?:USD|\$).*$",
+        price_line,
+        description,
+        count=1,
+    )
+
+
 def product_icon(product_code: str) -> str:
     if "grok" in product_code:
         return "✦"
@@ -779,7 +794,8 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
             "<blockquote>"
             + "\n".join(product_lines) +
             "</blockquote>\n\n"
-            f"{ce('fire')} <b>Benefits:</b> {ce('news_bolt')} Fast delivery · {ce('news_money')} Easy payment · {ce('ok')} Warranty · {ce('support')} {SUPPORT_USERNAME}\n\n"
+            f"{ce('fire')} <b>Benefits:</b>\n"
+            f"<blockquote>{ce('news_bolt')} Fast · {ce('news_money')} Payment · {ce('ok')} Warranty · {ce('support')} {SUPPORT_USERNAME}</blockquote>\n\n"
             f"{ce('stock')} <b>In stock:</b> {total_stock}\n\n"
             "Choose an action:"
         )
@@ -790,7 +806,8 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
         "<blockquote>"
         + "\n".join(product_lines) +
         "</blockquote>\n\n"
-        f"{ce('fire')} <b>Плюсы:</b> {ce('news_bolt')} Быстрая выдача · {ce('news_money')} Удобная оплата · {ce('ok')} Гарантия · {ce('support')} {SUPPORT_USERNAME}\n\n"
+        f"{ce('fire')} <b>Плюсы:</b>\n"
+        f"<blockquote>{ce('news_bolt')} Быстро · {ce('news_money')} Оплата · {ce('ok')} Гарантия · {ce('support')} {SUPPORT_USERNAME}</blockquote>\n\n"
         f"{ce('stock')} <b>Сейчас в наличии:</b> {total_stock}\n\n"
         "Выберите действие:"
     )
@@ -823,7 +840,7 @@ async def product_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> st
     if lang == "en":
         return (
             f"{product_icon(product_code)} <b>{product['title']}</b>\n\n"
-            f"{product['description']}\n\n"
+            f"{product_description(product, lang)}\n\n"
             f"{ce('news_money')} <b>Price:</b> {price}\n"
             f"{ce('stock')} <b>Stock:</b> {stock}\n"
             f"{ce('news_bolt')} <b>Delivery:</b> after order confirmation.\n\n"
@@ -832,7 +849,7 @@ async def product_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> st
 
     return (
         f"{product_icon(product_code)} <b>{product['title']}</b>\n\n"
-        f"{product['description']}\n\n"
+        f"{product_description(product, lang)}\n\n"
         f"{ce('news_money')} <b>Цена:</b> {price}\n"
         f"{ce('stock')} <b>Количество:</b> {stock}\n"
         f"{ce('news_bolt')} <b>Выдача:</b> после подтверждения заказа.\n\n"
