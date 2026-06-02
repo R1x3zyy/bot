@@ -308,6 +308,21 @@ function App() {
 
   const maxVisits = Math.max(...visits.map((point) => point.visits), 1);
   const maxLeaves = Math.max(...(channelLeaves?.chart.map((point) => point.leaves) || []), 1);
+  const businessSummary = useMemo(
+    () =>
+      businessDays.reduce(
+        (summary, day) => ({
+          orders: summary.orders + Number(day.orders_count),
+          issued: summary.issued + Number(day.issued_links),
+          revenueRub: summary.revenueRub + Number(day.revenue_rub),
+          revenueUsd: summary.revenueUsd + Number(day.revenue_usd),
+          costUsd: summary.costUsd + Number(day.cost_usd),
+          profitUsd: summary.profitUsd + Number(day.profit_usd),
+        }),
+        { orders: 0, issued: 0, revenueRub: 0, revenueUsd: 0, costUsd: 0, profitUsd: 0 },
+      ),
+    [businessDays],
+  );
 
   if (!isAuthed) {
     return (
@@ -422,7 +437,29 @@ function App() {
           </h2>
           <span className="muted-label">последние 30 дней</span>
         </div>
-        <div className="table-wrap">
+        <div className="daily-summary">
+          <span>
+            Оборот
+            <strong>{businessSummary.revenueRub.toFixed(0)} ₽</strong>
+            <small>${businessSummary.revenueUsd.toFixed(2)}</small>
+          </span>
+          <span>
+            Прибыль
+            <strong>${businessSummary.profitUsd.toFixed(2)}</strong>
+            <small>за выбранный период</small>
+          </span>
+          <span>
+            Заказы
+            <strong>{businessSummary.orders}</strong>
+            <small>выдано: {businessSummary.issued}</small>
+          </span>
+          <span>
+            Закуп
+            <strong>${businessSummary.costUsd.toFixed(2)}</strong>
+            <small>по фактическим выдачам</small>
+          </span>
+        </div>
+        <div className="table-wrap daily-table">
           <table>
             <thead>
               <tr>
@@ -430,7 +467,6 @@ function App() {
                 <th>Заказы</th>
                 <th>Оборот</th>
                 <th>Выдано</th>
-                <th>Выручка $</th>
                 <th>Закуп $</th>
                 <th>Прибыль $</th>
               </tr>
@@ -438,14 +474,20 @@ function App() {
             <tbody>
               {businessDays.map((day) => (
                 <tr key={day.date}>
-                  <td>{day.date}</td>
+                  <td>
+                    <strong>{day.date}</strong>
+                  </td>
                   <td>{day.orders_count}</td>
-                  <td>{Number(day.revenue_rub).toFixed(0)} ₽</td>
+                  <td>
+                    {Number(day.revenue_rub).toFixed(0)} ₽
+                    <small>${Number(day.revenue_usd).toFixed(2)}</small>
+                  </td>
                   <td>{day.issued_links}</td>
-                  <td>${Number(day.revenue_usd).toFixed(2)}</td>
                   <td>${Number(day.cost_usd).toFixed(2)}</td>
                   <td>
-                    <strong>${Number(day.profit_usd).toFixed(2)}</strong>
+                    <span className={Number(day.profit_usd) >= 0 ? 'profit-pill' : 'profit-pill negative'}>
+                      ${Number(day.profit_usd).toFixed(2)}
+                    </span>
                   </td>
                 </tr>
               ))}

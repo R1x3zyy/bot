@@ -385,6 +385,62 @@ label {
   margin: 12px 0 0;
 }
 
+.daily-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 14px;
+}
+
+.daily-summary span {
+  background: linear-gradient(180deg, var(--panel-soft), var(--panel));
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted);
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  padding: 14px;
+}
+
+.daily-summary strong {
+  color: var(--text);
+  font-size: 24px;
+}
+
+.daily-summary small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.daily-table table {
+  min-width: 720px;
+}
+
+.daily-table tbody tr:hover {
+  background: var(--panel-soft);
+}
+
+.profit-pill {
+  background: rgba(20, 184, 166, 0.14);
+  border: 1px solid rgba(20, 184, 166, 0.3);
+  border-radius: 999px;
+  color: #0f766e;
+  display: inline-flex;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.theme-dark .profit-pill {
+  color: #5eead4;
+}
+
+.profit-pill.negative {
+  background: rgba(225, 29, 72, 0.12);
+  border-color: rgba(225, 29, 72, 0.28);
+  color: #e11d48;
+}
+
 .visits-chart {
   align-items: end;
   display: grid;
@@ -552,6 +608,10 @@ td small {
   }
 
   .finance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-summary {
     grid-template-columns: 1fr;
   }
 
