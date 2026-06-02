@@ -145,7 +145,7 @@ def format_price(product: dict) -> str:
 
 def product_icon(product_code: str) -> str:
     if "grok" in product_code:
-        return ce("grok")
+        return "✦"
     if "gpt" in product_code:
         return ce("shop")
     return ce("gemini")
@@ -768,7 +768,8 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
     for product in products:
         stock = await count_available_links(product["code"])
         total_stock += stock
-        product_lines.append(f"{product_icon(product['code'])} {product['title']} | {format_price(product)} | {stock} {item_suffix}")
+        title = html.escape(str(product["title"]))
+        product_lines.append(f"{product_icon(product['code'])} {title} | {format_price(product)} | {stock} {item_suffix}")
     greeting_name = f", {html.escape(user_name)}" if user_name else ""
 
     if lang == "en":
