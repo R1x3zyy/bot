@@ -799,14 +799,14 @@ async def update_platega_payment_status(transaction_id: str, status: str) -> dic
         ).fetchone()
 
 
-async def list_active_crypto_payments(limit: int = 50) -> list[dict]:
+async def list_active_crypto_payments(limit: int = 200) -> list[dict]:
     with get_conn() as conn:
         return conn.execute(
             """
             SELECT *
             FROM crypto_payments
             WHERE status <> 'paid'
-            ORDER BY created_at
+            ORDER BY created_at DESC
             LIMIT %s
             """,
             (limit,),
