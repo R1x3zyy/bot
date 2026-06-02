@@ -780,12 +780,7 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
             + "\n".join(product_lines) +
             "</blockquote>\n\n"
             f"{ce('fire')} <b>Why choose us:</b>\n"
-            "<blockquote>"
-            f"{ce('news_bolt')} Fast delivery\n"
-            f"{ce('news_money')} Easy balance top-up\n"
-            f"{ce('ok')} Activation warranty\n"
-            f"{ce('support')} Support: {SUPPORT_USERNAME}"
-            "</blockquote>\n\n"
+            f"{ce('news_bolt')} Fast delivery · {ce('news_money')} Easy top-up · {ce('ok')} Warranty · {ce('support')} {SUPPORT_USERNAME}\n\n"
             f"{ce('stock')} <b>In stock:</b> {total_stock}\n\n"
             "Choose an action below:"
         )
@@ -797,12 +792,7 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
         + "\n".join(product_lines) +
         "</blockquote>\n\n"
         f"{ce('fire')} <b>Наши преимущества:</b>\n"
-        "<blockquote>"
-        f"{ce('news_bolt')} Быстрая выдача\n"
-        f"{ce('news_money')} Удобное пополнение баланса\n"
-        f"{ce('ok')} Гарантия на активацию\n"
-        f"{ce('support')} Поддержка: {SUPPORT_USERNAME}"
-        "</blockquote>\n\n"
+        f"{ce('news_bolt')} Быстрая выдача · {ce('news_money')} Удобная оплата · {ce('ok')} Гарантия · {ce('support')} {SUPPORT_USERNAME}\n\n"
         f"{ce('stock')} <b>Сейчас в наличии:</b> {total_stock}\n\n"
         "Выберите действие ниже:"
     )
