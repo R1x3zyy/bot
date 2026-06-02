@@ -796,7 +796,12 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
             + "\n".join(product_lines) +
             "</blockquote>\n\n"
             f"{ce('fire')} <b>Benefits:</b>\n"
-            f"<blockquote>{ce('news_bolt')} Fast · {ce('news_money')} Payment · {ce('ok')} Warranty · {ce('support')} {SUPPORT_USERNAME}</blockquote>\n\n"
+            "<blockquote>"
+            f"{ce('news_bolt')} Fast delivery\n"
+            f"{ce('news_money')} Easy payment\n"
+            f"{ce('ok')} Warranty\n"
+            f"{ce('support')} {SUPPORT_USERNAME}"
+            "</blockquote>\n\n"
             f"{ce('stock')} <b>In stock:</b> {total_stock}\n\n"
             "Choose an action:"
         )
@@ -808,7 +813,12 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
         + "\n".join(product_lines) +
         "</blockquote>\n\n"
         f"{ce('fire')} <b>Плюсы:</b>\n"
-        f"<blockquote>{ce('news_bolt')} Быстро · {ce('news_money')} Оплата · {ce('ok')} Гарантия · {ce('support')} {SUPPORT_USERNAME}</blockquote>\n\n"
+        "<blockquote>"
+        f"{ce('news_bolt')} Быстрая выдача\n"
+        f"{ce('news_money')} Удобная оплата\n"
+        f"{ce('ok')} Гарантия\n"
+        f"{ce('support')} {SUPPORT_USERNAME}"
+        "</blockquote>\n\n"
         f"{ce('stock')} <b>Сейчас в наличии:</b> {total_stock}\n\n"
         "Выберите действие:"
     )
