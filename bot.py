@@ -10,7 +10,7 @@ import aiohttp
 from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -44,6 +44,7 @@ from db import (
     ensure_schema,
     ensure_user,
     get_crypto_payment,
+    get_order,
     get_platega_payment,
     get_product_config,
     list_product_configs,
@@ -51,6 +52,7 @@ from db import (
     get_user,
     get_user_by_username,
     get_user_orders,
+    get_order_issued_links,
     issue_links_to_order,
     list_active_crypto_payments,
     list_pending_platega_payments,
@@ -59,6 +61,7 @@ from db import (
     record_bot_visit,
     update_user_language,
     update_product_config,
+    update_order_status,
 )
 
 
@@ -142,6 +145,13 @@ def resolve_product_code(value: str) -> str:
     normalized = value.strip().lower().replace("-", "_")
     normalized = normalized.replace(" ", "_")
     return PRODUCT_ALIASES.get(normalized, normalized)
+
+
+def quantity_from_order_title(title: str) -> int:
+    match = re.search(r"[×xX]\s*(\d+)", title)
+    if match:
+        return max(int(match.group(1)), 1)
+    return 1
 
 
 async def answer_with_banner(
@@ -1095,6 +1105,19 @@ def delivery_file(order_id: int, links: list[dict]) -> BufferedInputFile:
     return BufferedInputFile(content.encode("utf-8"), filename=filename)
 
 
+async def send_with_retry(send_call: Callable[[], Awaitable[Any]], attempts: int = 3) -> Any:
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return await send_call()
+        except TelegramNetworkError as exc:
+            last_error = exc
+            await asyncio.sleep(2 + attempt)
+    if last_error:
+        raise last_error
+    return None
+
+
 def reserved_text(lang: str = "ru") -> str:
     return (
         f"{ce('stock')} The order is paid, but there are not enough links in stock. "
@@ -1118,9 +1141,14 @@ async def deliver_order_links(
         return []
     if links:
         product_code = str(links[0].get("product_code") or "")
-        await message.answer(delivery_text(links, lang, product_code))
-        caption = "Items as a file" if lang == "en" else "Товар файлом"
-        await message.answer_document(delivery_file(order_id, links), caption=caption)
+        try:
+            await send_with_retry(lambda: message.answer(delivery_text(links, lang, product_code)))
+            caption = "Items as a file" if lang == "en" else "Товар файлом"
+            await send_with_retry(lambda: message.answer_document(delivery_file(order_id, links), caption=caption))
+        except Exception:
+            await update_order_status(order_id, "Выдан, нужна повторная отправка")
+            logging.exception("Could not send delivered order %s to user %s", order_id, user_id)
+            raise
         if with_review:
             review_text = (
                 f"{ce('news_pencil')} How was your purchase? You can leave a review."
@@ -1146,9 +1174,23 @@ async def deliver_order_links_to_user(
         return []
     if links:
         product_code = str(links[0].get("product_code") or "")
-        await bot.send_message(chat_id, delivery_text(links, lang, product_code))
-        caption = "Items as a file" if lang == "en" else "Товар файлом"
-        await bot.send_document(chat_id, delivery_file(order_id, links), caption=caption)
+        try:
+            await send_with_retry(lambda: bot.send_message(chat_id, delivery_text(links, lang, product_code)))
+            caption = "Items as a file" if lang == "en" else "Товар файлом"
+            await send_with_retry(lambda: bot.send_document(chat_id, delivery_file(order_id, links), caption=caption))
+        except Exception:
+            await update_order_status(order_id, "Выдан, нужна повторная отправка")
+            logging.exception("Could not send delivered order %s to user %s", order_id, chat_id)
+            if ADMIN_ID and ADMIN_ID.isdigit():
+                try:
+                    await bot.send_message(
+                        int(ADMIN_ID),
+                        f"⚠️ Заказ <b>#{order_id}</b> выдан в базе, но Telegram не отправил товар пользователю <code>{chat_id}</code>.\n"
+                        f"Повторить: <code>/resendorder {order_id}</code>",
+                    )
+                except Exception:
+                    logging.exception("Could not notify admin about failed delivery")
+            return links
         if with_review:
             review_text = (
                 f"{ce('news_pencil')} How was your purchase? You can leave a review."
@@ -1702,6 +1744,49 @@ async def take_item_command(message: Message) -> None:
         f"{ce('ok')} Забрал из наличия: <b>{len(issued)}</b>\n"
         f"Товар: <b>{product['title']}</b>\n"
         f"Заказ: <b>#{order['id']}</b>"
+    )
+
+
+@router.message(Command("resendorder"))
+async def resend_order_command(message: Message, bot: Bot) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    parts = (message.text or "").split()
+    if len(parts) < 2:
+        await message.answer(
+            "Формат:\n"
+            "<code>/resendorder order_id</code>\n\n"
+            "Пример: <code>/resendorder 73</code>"
+        )
+        return
+
+    try:
+        order_id = int(parts[1])
+    except ValueError:
+        await message.answer("ID заказа должен быть числом.")
+        return
+
+    order = await get_order(order_id)
+    if not order:
+        await message.answer("Заказ не найден.")
+        return
+
+    quantity = quantity_from_order_title(str(order["product_title"]))
+    links = await get_order_issued_links(order_id, quantity)
+    if not links:
+        await message.answer("У этого заказа нет уже выданного товара для повторной отправки.")
+        return
+
+    lang = await get_lang(int(order["user_id"]))
+    await send_with_retry(lambda: bot.send_message(order["user_id"], delivery_text(links, lang, str(order["product_code"]))))
+    caption = "Items as a file" if lang == "en" else "Товар файлом"
+    await send_with_retry(lambda: bot.send_document(order["user_id"], delivery_file(order_id, links), caption=caption))
+    await update_order_status(order_id, "Выдан автоматически")
+    await message.answer(
+        f"{ce('ok')} Заказ <b>#{order_id}</b> повторно отправлен пользователю <code>{order['user_id']}</code>.\n"
+        f"Позиций: <b>{len(links)}</b>"
     )
 
 
@@ -3117,6 +3202,7 @@ async def main() -> None:
                 BotCommand(command="daystats", description="Статистика за день"),
                 BotCommand(command="giveitem", description="Выдать товар пользователю"),
                 BotCommand(command="takeitem", description="Забрать товар себе"),
+                BotCommand(command="resendorder", description="Повторно отправить заказ"),
                 BotCommand(command="setprice", description="Поменять цену товара"),
                 BotCommand(command="addlinks", description="Добавить ссылки"),
                 BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),

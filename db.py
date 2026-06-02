@@ -50,6 +50,7 @@ async def ensure_schema() -> None:
                 purchase_cost_usd NUMERIC(12, 2) NOT NULL DEFAULT 1.50,
                 is_issued BOOLEAN NOT NULL DEFAULT FALSE,
                 issued_to BIGINT REFERENCES users(id) ON DELETE SET NULL,
+                order_id BIGINT,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 issued_at TIMESTAMPTZ
             );
@@ -156,6 +157,7 @@ async def ensure_schema() -> None:
         conn.execute(
             "ALTER TABLE links ADD COLUMN IF NOT EXISTS product_code TEXT NOT NULL DEFAULT 'gemini_link_18_month'"
         )
+        conn.execute("ALTER TABLE links ADD COLUMN IF NOT EXISTS order_id BIGINT REFERENCES orders(id) ON DELETE SET NULL")
         conn.execute(
             """
             INSERT INTO product_settings (code, title, price_rub, price_usd, description)
@@ -447,8 +449,10 @@ async def issue_links_to_order(order_id: int, user_id: int, quantity: int, statu
             "SELECT issued_link_id, product_code FROM orders WHERE id = %s FOR UPDATE",
             (order_id,),
         ).fetchone()
-        if not order or order["issued_link_id"]:
+        if not order:
             return None
+        if order["issued_link_id"]:
+            return await get_order_issued_links(order_id, quantity)
 
         links = conn.execute(
             """
@@ -475,10 +479,11 @@ async def issue_links_to_order(order_id: int, user_id: int, quantity: int, statu
             UPDATE links
             SET is_issued = TRUE,
                 issued_to = %s,
+                order_id = %s,
                 issued_at = now()
             WHERE id = ANY(%s::bigint[])
             """,
-            (user_id, link_ids),
+            (user_id, order_id, link_ids),
         )
         conn.execute(
             """
@@ -490,6 +495,43 @@ async def issue_links_to_order(order_id: int, user_id: int, quantity: int, statu
             (link_ids[0], status, order_id),
         )
         return links
+
+
+async def get_order_issued_links(order_id: int, quantity: int | None = None) -> list[dict]:
+    with get_conn() as conn:
+        order = conn.execute(
+            "SELECT id, user_id, product_code, issued_link_id FROM orders WHERE id = %s",
+            (order_id,),
+        ).fetchone()
+        if not order or not order["issued_link_id"]:
+            return []
+
+        links = conn.execute(
+            """
+            SELECT id, url, product_code
+            FROM links
+            WHERE order_id = %s
+            ORDER BY id
+            """,
+            (order_id,),
+        ).fetchall()
+        if links:
+            return links
+
+        limit = quantity or 1
+        return conn.execute(
+            """
+            SELECT id, url, product_code
+            FROM links
+            WHERE is_issued = TRUE
+                AND issued_to = %s
+                AND product_code = %s
+                AND id >= %s
+            ORDER BY id
+            LIMIT %s
+            """,
+            (order["user_id"], order["product_code"], order["issued_link_id"], limit),
+        ).fetchall()
 
 
 async def create_order(
@@ -667,6 +709,11 @@ async def update_order_status(order_id: int, status: str) -> dict | None:
             "UPDATE orders SET status = %s WHERE id = %s RETURNING *",
             (status, order_id),
         ).fetchone()
+
+
+async def get_order(order_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM orders WHERE id = %s", (order_id,)).fetchone()
 
 
 async def get_user_orders(user_id: int) -> list[dict]:
