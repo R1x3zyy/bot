@@ -642,6 +642,22 @@ async def get_crypto_payment_by_invoice(invoice_id: int) -> dict | None:
         ).fetchone()
 
 
+async def cancel_crypto_payment(payment_id: int, user_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            UPDATE crypto_payments
+            SET status = 'cancelled'
+            WHERE id = %s
+              AND user_id = %s
+              AND status <> 'paid'
+              AND status <> 'cancelled'
+            RETURNING *
+            """,
+            (payment_id, user_id),
+        ).fetchone()
+
+
 async def complete_crypto_payment(payment_id: int, username: str, order_status: str) -> dict | None:
     with get_conn() as conn:
         payment = conn.execute(
@@ -651,6 +667,8 @@ async def complete_crypto_payment(payment_id: int, username: str, order_status: 
         if not payment:
             return None
         if payment["status"] == "paid":
+            return None
+        if payment["status"] == "cancelled":
             return None
 
         order_id = None
@@ -792,10 +810,28 @@ async def update_platega_payment_status(transaction_id: str, status: str) -> dic
             """
             UPDATE platega_payments
             SET status = %s
-            WHERE transaction_id = %s AND status <> 'CONFIRMED'
+            WHERE transaction_id = %s
+              AND status <> 'CONFIRMED'
+              AND status <> 'CANCELLED'
             RETURNING *
             """,
             (status, transaction_id),
+        ).fetchone()
+
+
+async def cancel_platega_payment(payment_id: int, user_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            UPDATE platega_payments
+            SET status = 'CANCELLED'
+            WHERE id = %s
+              AND user_id = %s
+              AND status <> 'CONFIRMED'
+              AND status <> 'CANCELLED'
+            RETURNING *
+            """,
+            (payment_id, user_id),
         ).fetchone()
 
 
@@ -805,7 +841,7 @@ async def list_active_crypto_payments(limit: int = 200) -> list[dict]:
             """
             SELECT *
             FROM crypto_payments
-            WHERE status <> 'paid'
+            WHERE status NOT IN ('paid', 'cancelled')
             ORDER BY created_at DESC
             LIMIT %s
             """,
@@ -819,7 +855,7 @@ async def list_pending_platega_payments(limit: int = 50) -> list[dict]:
             """
             SELECT *
             FROM platega_payments
-            WHERE status <> 'CONFIRMED'
+            WHERE status NOT IN ('CONFIRMED', 'CANCELLED')
             ORDER BY created_at
             LIMIT %s
             """,
@@ -836,6 +872,8 @@ async def complete_platega_payment(payment_id: int, username: str = "", status: 
         if not payment:
             return None
         if payment["status"] == "CONFIRMED":
+            return None
+        if payment["status"] == "CANCELLED":
             return None
 
         if payment["purpose"] == "topup":

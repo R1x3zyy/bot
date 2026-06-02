@@ -32,6 +32,8 @@ from dotenv import load_dotenv
 from db import (
     add_links,
     admin_stats,
+    cancel_crypto_payment,
+    cancel_platega_payment,
     complete_platega_payment,
     complete_crypto_payment,
     count_available_links,
@@ -604,10 +606,12 @@ async def admin_price_products_keyboard() -> InlineKeyboardMarkup:
 def cryptobot_invoice_keyboard(payment_id: int, invoice_url: str, lang: str = "ru") -> InlineKeyboardMarkup:
     pay_text = "💵 Pay invoice" if lang == "en" else "💵 Оплатить счет"
     check_text = "✅ Check payment" if lang == "en" else "✅ Проверить оплату"
+    cancel_text = "❌ Cancel payment" if lang == "en" else "❌ Отменить оплату"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=pay_text, url=invoice_url)],
             [InlineKeyboardButton(text=check_text, callback_data=f"cryptobot:check:{payment_id}")],
+            [InlineKeyboardButton(text=cancel_text, callback_data=f"cryptobot:cancel:{payment_id}")],
         ]
     )
 
@@ -615,10 +619,12 @@ def cryptobot_invoice_keyboard(payment_id: int, invoice_url: str, lang: str = "r
 def platega_invoice_keyboard(payment_id: int, payment_url: str, lang: str = "ru") -> InlineKeyboardMarkup:
     pay_text = "💵 Pay Platega" if lang == "en" else "💵 Оплатить Platega"
     check_text = "✅ Check payment" if lang == "en" else "✅ Проверить оплату"
+    cancel_text = "❌ Cancel payment" if lang == "en" else "❌ Отменить оплату"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=pay_text, url=payment_url)],
             [InlineKeyboardButton(text=check_text, callback_data=f"platega:check:{payment_id}")],
+            [InlineKeyboardButton(text=cancel_text, callback_data=f"platega:cancel:{payment_id}")],
         ]
     )
 
@@ -2440,6 +2446,10 @@ async def check_platega_payment(callback: CallbackQuery, bot: Bot) -> None:
         await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
         return
 
+    if payment["status"] == "CANCELLED":
+        await callback.answer("Payment was cancelled." if lang == "en" else "Оплата отменена.", show_alert=True)
+        return
+
     if payment["status"] == "CONFIRMED":
         text = (
             f"{ce('ok')} This payment has already been credited."
@@ -2475,13 +2485,41 @@ async def check_platega_payment(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     return
 
+
+@router.callback_query(F.data.startswith("platega:cancel:"))
+async def cancel_platega_invoice(callback: CallbackQuery, bot: Bot) -> None:
+    lang = await get_lang(callback.from_user.id)
+    payment_id = int(callback.data.split(":")[-1])
+    payment = await get_platega_payment(payment_id)
+    if not payment or payment["user_id"] != callback.from_user.id:
+        await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
+        return
+
+    if payment["status"] == "CONFIRMED":
+        await callback.answer("Payment has already been credited." if lang == "en" else "Платеж уже зачислен.", show_alert=True)
+        return
+
+    try:
+        transaction = await get_platega_transaction(str(payment["transaction_id"]))
+    except Exception:
+        transaction = None
+
+    if str((transaction or {}).get("status", "")).upper() == "CONFIRMED":
+        username = await payment_username(callback.from_user.id)
+        completed = await complete_platega_payment(payment_id, username, "CONFIRMED")
+        if completed:
+            await notify_paid_payment(bot, completed, "Platega")
+            await callback.answer()
+            return
+
+    cancelled = await cancel_platega_payment(payment_id, callback.from_user.id)
     text = (
-        f"{ce('ok')} Balance topped up by <b>{int(completed['amount_rub'])} ₽</b>."
+        f"{ce('cross')} Payment cancelled. You can create a new payment anytime."
         if lang == "en"
-        else f"{ce('ok')} Баланс пополнен на <b>{int(completed['amount_rub'])} ₽</b>."
+        else f"{ce('cross')} Оплата отменена. Вы можете создать новый счет в любой момент."
     )
-    await callback.message.answer(text, reply_markup=start_keyboard(lang))
-    await callback.answer()
+    await edit_or_answer(callback.message, text, reply_markup=start_keyboard(lang))
+    await callback.answer("Cancelled." if cancelled and lang == "en" else "Отменено.")
 
 
 @router.callback_query(F.data == "profile:purchases")
@@ -2968,6 +3006,10 @@ async def check_cryptobot_payment(callback: CallbackQuery, bot: Bot) -> None:
         await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
         return
 
+    if payment["status"] == "cancelled":
+        await callback.answer("Payment was cancelled." if lang == "en" else "Оплата отменена.", show_alert=True)
+        return
+
     if payment["status"] == "paid":
         if payment["purpose"] != "topup" and payment["order_id"]:
             quantity = int(payment["quantity"] or 1)
@@ -3066,6 +3108,42 @@ async def check_cryptobot_payment(callback: CallbackQuery, bot: Bot) -> None:
 
     await callback.message.answer(text, reply_markup=start_keyboard(lang))
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("cryptobot:cancel:"))
+async def cancel_cryptobot_invoice(callback: CallbackQuery, bot: Bot) -> None:
+    lang = await get_lang(callback.from_user.id)
+    payment_id = int(callback.data.split(":")[-1])
+    payment = await get_crypto_payment(payment_id)
+    if not payment or payment["user_id"] != callback.from_user.id:
+        await callback.answer("Payment not found." if lang == "en" else "Платеж не найден.", show_alert=True)
+        return
+
+    if payment["status"] == "paid":
+        await callback.answer("Payment has already been credited." if lang == "en" else "Платеж уже зачислен.", show_alert=True)
+        return
+
+    try:
+        invoice = await get_cryptobot_invoice(int(payment["invoice_id"]))
+    except Exception:
+        invoice = None
+
+    if invoice and invoice.get("status") == "paid":
+        username = await payment_username(callback.from_user.id)
+        completed = await complete_crypto_payment(payment_id, username, "Оплачен Crypto Bot, ожидает обработки")
+        if completed:
+            await notify_paid_payment(bot, completed, "Crypto Bot")
+            await callback.answer()
+            return
+
+    cancelled = await cancel_crypto_payment(payment_id, callback.from_user.id)
+    text = (
+        f"{ce('cross')} Payment cancelled. You can create a new payment anytime."
+        if lang == "en"
+        else f"{ce('cross')} Оплата отменена. Вы можете создать новый счет в любой момент."
+    )
+    await edit_or_answer(callback.message, text, reply_markup=start_keyboard(lang))
+    await callback.answer("Cancelled." if cancelled and lang == "en" else "Отменено.")
 
 
 @router.callback_query(F.data == "order:start")
