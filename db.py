@@ -30,6 +30,22 @@ def get_conn():
         yield conn
 
 
+def snapshot_sale_usd(conn, product_code: str, price_rub: int | Decimal, fallback: Decimal | None = None) -> Decimal:
+    if fallback is not None:
+        return Decimal(fallback)
+    product = conn.execute(
+        "SELECT price_rub, price_usd FROM product_settings WHERE code = %s",
+        (product_code,),
+    ).fetchone()
+    if not product:
+        return Decimal("0")
+    product_rub = Decimal(product["price_rub"] or 0)
+    product_usd = Decimal(product["price_usd"] or 0)
+    if product_rub <= 0:
+        return Decimal("0")
+    return (Decimal(price_rub or 0) / product_rub) * product_usd
+
+
 async def ensure_schema() -> None:
     with get_conn() as conn:
         conn.execute(
@@ -63,6 +79,7 @@ async def ensure_schema() -> None:
                 product_code TEXT NOT NULL,
                 product_title TEXT NOT NULL,
                 price_rub NUMERIC(12, 2) NOT NULL,
+                sale_usd NUMERIC(12, 2),
                 contact TEXT NOT NULL,
                 status TEXT NOT NULL,
                 issued_link_id BIGINT REFERENCES links(id) ON DELETE SET NULL,
@@ -93,6 +110,7 @@ async def ensure_schema() -> None:
                 invoice_id BIGINT NOT NULL UNIQUE,
                 purpose TEXT NOT NULL,
                 amount_rub NUMERIC(12, 2) NOT NULL,
+                amount_usd NUMERIC(12, 2),
                 status TEXT NOT NULL DEFAULT 'active',
                 product_code TEXT NOT NULL DEFAULT '',
                 product_title TEXT NOT NULL DEFAULT '',
@@ -136,6 +154,7 @@ async def ensure_schema() -> None:
                 transaction_id TEXT NOT NULL UNIQUE,
                 purpose TEXT NOT NULL,
                 amount_rub NUMERIC(12, 2) NOT NULL,
+                amount_usd NUMERIC(12, 2),
                 status TEXT NOT NULL DEFAULT 'PENDING',
                 product_code TEXT NOT NULL DEFAULT '',
                 product_title TEXT NOT NULL DEFAULT '',
@@ -152,6 +171,9 @@ async def ensure_schema() -> None:
         conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 0")
         conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS contact TEXT NOT NULL DEFAULT ''")
         conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS order_id BIGINT REFERENCES orders(id) ON DELETE SET NULL")
+        conn.execute("ALTER TABLE crypto_payments ADD COLUMN IF NOT EXISTS amount_usd NUMERIC(12, 2)")
+        conn.execute("ALTER TABLE platega_payments ADD COLUMN IF NOT EXISTS amount_usd NUMERIC(12, 2)")
+        conn.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS sale_usd NUMERIC(12, 2)")
         conn.execute(
             "ALTER TABLE links ADD COLUMN IF NOT EXISTS purchase_cost_usd NUMERIC(12, 2) NOT NULL DEFAULT 1.50"
         )
@@ -242,6 +264,21 @@ async def ensure_schema() -> None:
                 """,
                 default_products,
             )
+        conn.execute(
+            """
+            UPDATE orders
+            SET sale_usd = CASE
+                WHEN product_settings.price_rub > 0
+                    THEN (orders.price_rub / product_settings.price_rub) * product_settings.price_usd
+                ELSE 0
+            END
+            FROM product_settings
+            WHERE orders.product_code = product_settings.code
+                AND orders.sale_usd IS NULL
+                AND orders.price_rub > 0
+            """
+        )
+        conn.execute("UPDATE orders SET sale_usd = 0 WHERE sale_usd IS NULL")
 
 
 async def ensure_user(user_id: int, username: str | None, first_name: str | None) -> dict:
@@ -566,15 +603,17 @@ async def create_order(
     price_rub: int,
     contact: str,
     status: str,
+    sale_usd: Decimal | None = None,
 ) -> dict:
     with get_conn() as conn:
+        sale_usd = snapshot_sale_usd(conn, product_code, price_rub, sale_usd)
         return conn.execute(
             """
-            INSERT INTO orders (user_id, username, product_code, product_title, price_rub, contact, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO orders (user_id, username, product_code, product_title, price_rub, sale_usd, contact, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (user_id, username, product_code, product_title, price_rub, contact, status),
+            (user_id, username, product_code, product_title, price_rub, sale_usd, contact, status),
         ).fetchone()
 
 
@@ -598,6 +637,7 @@ async def create_balance_order(
     price_rub: int,
     contact: str,
     status: str,
+    sale_usd: Decimal | None = None,
 ) -> dict | None:
     with get_conn() as conn:
         charged_user = conn.execute(
@@ -612,13 +652,14 @@ async def create_balance_order(
         if not charged_user:
             return None
 
+        sale_usd = snapshot_sale_usd(conn, product_code, price_rub, sale_usd)
         order = conn.execute(
             """
-            INSERT INTO orders (user_id, username, product_code, product_title, price_rub, contact, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO orders (user_id, username, product_code, product_title, price_rub, sale_usd, contact, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (user_id, username, product_code, product_title, price_rub, contact, status),
+            (user_id, username, product_code, product_title, price_rub, sale_usd, contact, status),
         ).fetchone()
         conn.execute(
             """
@@ -635,6 +676,7 @@ async def create_crypto_payment(
     invoice_id: int,
     purpose: str,
     amount_rub: int,
+    amount_usd: Decimal | None = None,
     product_code: str = "",
     product_title: str = "",
     quantity: int = 0,
@@ -644,12 +686,12 @@ async def create_crypto_payment(
         return conn.execute(
             """
             INSERT INTO crypto_payments (
-                user_id, invoice_id, purpose, amount_rub, product_code, product_title, quantity, contact
+                user_id, invoice_id, purpose, amount_rub, amount_usd, product_code, product_title, quantity, contact
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (user_id, invoice_id, purpose, amount_rub, product_code, product_title, quantity, contact),
+            (user_id, invoice_id, purpose, amount_rub, amount_usd, product_code, product_title, quantity, contact),
         ).fetchone()
 
 
@@ -709,10 +751,11 @@ async def complete_crypto_payment(payment_id: int, username: str, order_status: 
                 (payment["user_id"], "topup", payment["amount_rub"], "Crypto Bot top-up"),
             )
         elif payment["purpose"] in {"order", "bulk_order"}:
+            sale_usd = snapshot_sale_usd(conn, payment["product_code"], payment["amount_rub"], payment["amount_usd"])
             order = conn.execute(
                 """
-                INSERT INTO orders (user_id, username, product_code, product_title, price_rub, contact, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO orders (user_id, username, product_code, product_title, price_rub, sale_usd, contact, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -721,6 +764,7 @@ async def complete_crypto_payment(payment_id: int, username: str, order_status: 
                     payment["product_code"],
                     payment["product_title"],
                     payment["amount_rub"],
+                    sale_usd,
                     payment["contact"],
                     order_status,
                 ),
@@ -797,6 +841,7 @@ async def create_platega_payment(
     transaction_id: str,
     purpose: str,
     amount_rub: int,
+    amount_usd: Decimal | None = None,
     product_code: str = "",
     product_title: str = "",
     quantity: int = 0,
@@ -806,12 +851,12 @@ async def create_platega_payment(
         return conn.execute(
             """
             INSERT INTO platega_payments (
-                user_id, transaction_id, purpose, amount_rub, product_code, product_title, quantity, contact
+                user_id, transaction_id, purpose, amount_rub, amount_usd, product_code, product_title, quantity, contact
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (user_id, transaction_id, purpose, amount_rub, product_code, product_title, quantity, contact),
+            (user_id, transaction_id, purpose, amount_rub, amount_usd, product_code, product_title, quantity, contact),
         ).fetchone()
 
 
@@ -913,10 +958,11 @@ async def complete_platega_payment(payment_id: int, username: str = "", status: 
                 (payment["user_id"], "topup", payment["amount_rub"], "Platega top-up"),
             )
         elif payment["purpose"] in {"order", "bulk_order"}:
+            sale_usd = snapshot_sale_usd(conn, payment["product_code"], payment["amount_rub"], payment["amount_usd"])
             order = conn.execute(
                 """
-                INSERT INTO orders (user_id, username, product_code, product_title, price_rub, contact, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO orders (user_id, username, product_code, product_title, price_rub, sale_usd, contact, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -925,6 +971,7 @@ async def complete_platega_payment(payment_id: int, username: str = "", status: 
                     payment["product_code"],
                     payment["product_title"],
                     payment["amount_rub"],
+                    sale_usd,
                     payment["contact"],
                     "Оплачен Platega, ожидает обработки",
                 ),
@@ -986,6 +1033,7 @@ async def daily_business_stats() -> dict:
             """
             SELECT
                 orders.price_rub,
+                orders.sale_usd,
                 product_settings.price_rub AS product_price_rub,
                 product_settings.price_usd AS product_price_usd
             FROM orders
@@ -1013,11 +1061,14 @@ async def daily_business_stats() -> dict:
 
     revenue_usd = Decimal("0")
     for order in orders:
-        price_rub = Decimal(order["product_price_rub"] or 0)
-        price_usd = Decimal(order["product_price_usd"] or 0)
-        if price_rub > 0:
-            quantity = Decimal(order["price_rub"]) / price_rub
-            revenue_usd += quantity * price_usd
+        if order["sale_usd"] is not None:
+            revenue_usd += Decimal(order["sale_usd"] or 0)
+        else:
+            price_rub = Decimal(order["product_price_rub"] or 0)
+            price_usd = Decimal(order["product_price_usd"] or 0)
+            if price_rub > 0:
+                quantity = Decimal(order["price_rub"]) / price_rub
+                revenue_usd += quantity * price_usd
     issued_links = issued_summary["count"]
     cost_usd = Decimal(issued_summary["cost_usd"])
     average_cost_usd = cost_usd / issued_links if issued_links else Decimal("0")
@@ -1054,6 +1105,7 @@ async def business_stats_by_days(days: int = 30) -> list[dict]:
             SELECT
                 (orders.created_at AT TIME ZONE %s)::date AS day,
                 orders.price_rub,
+                orders.sale_usd,
                 product_settings.price_rub AS product_price_rub,
                 product_settings.price_usd AS product_price_usd
             FROM orders
@@ -1104,7 +1156,9 @@ async def business_stats_by_days(days: int = 30) -> list[dict]:
         revenue_rub = Decimal(order["price_rub"] or 0)
         stats[day]["orders_count"] += 1
         stats[day]["revenue_rub"] += revenue_rub
-        if price_rub > 0:
+        if order["sale_usd"] is not None:
+            stats[day]["revenue_usd"] += Decimal(order["sale_usd"] or 0)
+        elif price_rub > 0:
             stats[day]["revenue_usd"] += (revenue_rub / price_rub) * price_usd
 
     for issued in issued_rows:

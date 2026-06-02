@@ -1024,6 +1024,7 @@ async def send_cryptobot_invoice(
     product_title: str = "",
     quantity: int = 0,
     contact: str = "",
+    amount_usd: Decimal | None = None,
 ) -> None:
     description = (
         f"Balance top-up: {amount_rub} RUB"
@@ -1036,6 +1037,7 @@ async def send_cryptobot_invoice(
         invoice_id=int(invoice["invoice_id"]),
         purpose=purpose,
         amount_rub=amount_rub,
+        amount_usd=amount_usd,
         product_code=product_code,
         product_title=product_title,
         quantity=quantity,
@@ -1066,6 +1068,7 @@ async def send_platega_invoice(
     product_title: str = "",
     quantity: int = 0,
     contact: str = "",
+    amount_usd: Decimal | None = None,
 ) -> None:
     description = (
         f"Balance top-up: {amount_rub} RUB"
@@ -1083,6 +1086,7 @@ async def send_platega_invoice(
         transaction_id=str(transaction_id),
         purpose=purpose,
         amount_rub=amount_rub,
+        amount_usd=amount_usd,
         product_code=product_code,
         product_title=product_title,
         quantity=quantity,
@@ -1410,6 +1414,7 @@ async def process_balance_quantity_order(
     balance = int(user["balance"]) if user else 0
     pricing = calculate_order_price(product, quantity)
     total = int(pricing["total_rub"])
+    sale_usd = Decimal(pricing["unit_usd"]) * quantity
     if balance < total:
         missing = total - balance
         await state.set_state(TopUpState.waiting_for_amount)
@@ -1433,6 +1438,7 @@ async def process_balance_quantity_order(
         price_rub=total,
         contact=contact,
         status=status,
+        sale_usd=sale_usd,
     )
     if not order:
         user = await get_user(message.chat.id)
@@ -1697,6 +1703,7 @@ async def give_item_command(message: Message, bot: Bot) -> None:
         await ensure_user(target_user_id, "", "")
     order_title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
     pricing = calculate_order_price(product, quantity)
+    sale_usd = Decimal(pricing["unit_usd"]) * quantity
     order = await create_order(
         user_id=target_user_id,
         username=target_username or "manual_admin_issue",
@@ -1705,6 +1712,7 @@ async def give_item_command(message: Message, bot: Bot) -> None:
         price_rub=int(pricing["total_rub"]),
         contact=f"manual:{message.from_user.id}",
         status="Ожидает ручной выдачи",
+        sale_usd=sale_usd,
     )
 
     target_lang = await get_lang(target_user_id)
@@ -2593,6 +2601,7 @@ async def start_crypto_order(callback: CallbackQuery, state: FSMContext) -> None
     await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     product = await get_product_config(PRODUCT_CODE)
     price = int(product["price_rub"])
+    sale_usd = Decimal(str(product["price_usd"]))
     contact = f"@{callback.from_user.username}" if callback.from_user.username else f"id:{callback.from_user.id}"
     try:
         await send_cryptobot_invoice(
@@ -2605,6 +2614,7 @@ async def start_crypto_order(callback: CallbackQuery, state: FSMContext) -> None
             product_title=product["title"],
             quantity=1,
             contact=contact,
+            amount_usd=sale_usd,
         )
     except Exception:
         logging.exception("Could not create Crypto Bot order invoice")
@@ -2791,6 +2801,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
         pricing = calculate_order_price(product, quantity)
         total = int(pricing["total_rub"])
         if method in {"cryptobot", "platega"}:
+            sale_usd = Decimal(pricing["unit_usd"]) * quantity
             await ensure_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
             contact = f"@{callback.from_user.username}" if callback.from_user.username else f"id:{callback.from_user.id}"
             title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
@@ -2806,6 +2817,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
                         product_title=title,
                         quantity=quantity,
                         contact=contact,
+                        amount_usd=sale_usd,
                     )
                 else:
                     await send_platega_invoice(
@@ -2818,6 +2830,7 @@ async def choose_bulk_payment(callback: CallbackQuery, state: FSMContext) -> Non
                         product_title=title,
                         quantity=quantity,
                         contact=contact,
+                        amount_usd=sale_usd,
                     )
                 await state.clear()
             except Exception:
@@ -2927,6 +2940,7 @@ async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) ->
     username = f"@{message.from_user.username}" if message.from_user.username else "username не указан"
     pricing = calculate_order_price(product, quantity)
     total = int(pricing["total_rub"])
+    sale_usd = Decimal(pricing["unit_usd"]) * quantity
     order_title = f"{product['title']} ×{quantity}"
     status = "Ожидает обработки" if stock >= quantity else "Резерв, нет в наличии"
 
@@ -2938,6 +2952,7 @@ async def receive_bulk_contact(message: Message, state: FSMContext, bot: Bot) ->
         price_rub=total,
         contact=contact,
         status=status,
+        sale_usd=sale_usd,
     )
     if not order:
         user = await get_user(message.from_user.id)
@@ -3018,6 +3033,7 @@ async def receive_crypto_order_contact(message: Message, state: FSMContext) -> N
     product = await get_product_config(PRODUCT_CODE)
     pricing = calculate_order_price(product, quantity)
     total = int(pricing["total_rub"])
+    sale_usd = Decimal(pricing["unit_usd"]) * quantity
     title = product["title"] if quantity == 1 else f"{product['title']} ×{quantity}"
 
     try:
@@ -3031,6 +3047,7 @@ async def receive_crypto_order_contact(message: Message, state: FSMContext) -> N
             product_title=title,
             quantity=quantity,
             contact=contact,
+            amount_usd=sale_usd,
         )
         await state.clear()
     except Exception:
@@ -3240,6 +3257,7 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
     status = "Ожидает обработки" if stock else "Резерв, нет в наличии"
 
     price = int(product["price_rub"])
+    sale_usd = Decimal(str(product["price_usd"]))
     order = await create_balance_order(
         user_id=message.from_user.id,
         username=username,
@@ -3248,6 +3266,7 @@ async def receive_order_contact(message: Message, state: FSMContext, bot: Bot) -
         price_rub=price,
         contact=contact,
         status=status,
+        sale_usd=sale_usd,
     )
     if not order:
         user = await get_user(message.from_user.id)
