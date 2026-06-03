@@ -1283,7 +1283,7 @@ async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
             if lang == "en"
             else f"{ce('ok')} Баланс пополнен на <b>{amount} ₽</b>."
         )
-        await bot.send_message(int(payment["user_id"]), text, reply_markup=start_keyboard(lang))
+        await bot.send_message(int(payment["user_id"]), text, reply_markup=start_keyboard(lang), parse_mode=ParseMode.HTML)
         return
 
     quantity = int(payment["quantity"] or 1)
@@ -1308,7 +1308,7 @@ async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
             if lang == "en"
             else f"{ce('ok')} Оплата получена. Заказ создан и выдан."
         )
-    await bot.send_message(int(payment["user_id"]), text, reply_markup=start_keyboard(lang))
+    await bot.send_message(int(payment["user_id"]), text, reply_markup=start_keyboard(lang), parse_mode=ParseMode.HTML)
 
     if ADMIN_ID:
         username = await payment_username(int(payment["user_id"]))
@@ -1323,7 +1323,7 @@ async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
             f"Контакт: {payment['contact']}"
         )
         try:
-            await bot.send_message(int(ADMIN_ID), admin_message)
+            await bot.send_message(int(ADMIN_ID), admin_message, parse_mode=ParseMode.HTML)
         except ValueError:
             logging.exception("ADMIN_ID must be a number")
         except Exception:
