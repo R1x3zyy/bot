@@ -734,8 +734,6 @@ async def complete_crypto_payment(payment_id: int, username: str, order_status: 
             return None
         if payment["status"] == "paid":
             return None
-        if payment["status"] == "cancelled":
-            return None
 
         order_id = None
         if payment["purpose"] == "topup":
@@ -941,8 +939,6 @@ async def complete_platega_payment(payment_id: int, username: str = "", status: 
         if not payment:
             return None
         if payment["status"] == "CONFIRMED":
-            return None
-        if payment["status"] == "CANCELLED":
             return None
 
         if payment["purpose"] == "topup":
