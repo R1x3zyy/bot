@@ -84,6 +84,8 @@ PRODUCT_CODE = "gemini_link_18_month"
 GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
 GEMINI_ACCOUNT_PRODUCT_CODE = "gemini_account_12_month"
 SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
+GPT_WHOLESALE_MIN_QUANTITY = 10
+GPT_WHOLESALE_UNIT_USD = Decimal("3.5")
 SUPPORT_USERNAME = "@R1x3zyy"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
 PROFILE_BANNER_PATH = os.path.join(os.path.dirname(__file__), "assets", "profile_banner.png")
@@ -224,8 +226,8 @@ def calculate_order_price(product: dict, quantity: int) -> dict[str, Decimal | i
     base_usd = Decimal(str(product["price_usd"]))
     unit_usd = base_usd
 
-    if product.get("code") == GPT_ACCOUNT_PRODUCT_CODE and quantity >= 10:
-        unit_usd = Decimal("3.5")
+    if product.get("code") == GPT_ACCOUNT_PRODUCT_CODE and quantity >= GPT_WHOLESALE_MIN_QUANTITY:
+        unit_usd = GPT_WHOLESALE_UNIT_USD
 
     if base_usd > 0:
         unit_rub = (base_rub / base_usd * unit_usd).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
@@ -1369,14 +1371,14 @@ async def quantity_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> s
     product = await get_product_config(product_code)
     stock = await count_available_links(product_code)
     pricing = calculate_order_price(product, 1)
-    tier_10 = calculate_order_price(product, 10)
+    tier_10 = calculate_order_price(product, GPT_WHOLESALE_MIN_QUANTITY)
     wholesale_en = (
-        f"{ce('fire')} From <b>10 pcs.</b>: <b>{tier_10['unit_rub']} ₽ / {format_usd(tier_10['unit_usd'])}$</b>\n"
+        f"{ce('fire')} From <b>{GPT_WHOLESALE_MIN_QUANTITY} pcs.</b>: <b>{tier_10['unit_rub']} ₽ / {format_usd(tier_10['unit_usd'])}$</b>\n"
         if product_code == GPT_ACCOUNT_PRODUCT_CODE
         else ""
     )
     wholesale_ru = (
-        f"{ce('fire')} От <b>10 шт.</b>: <b>{tier_10['unit_rub']} ₽ / {format_usd(tier_10['unit_usd'])}$</b>\n"
+        f"{ce('fire')} От <b>{GPT_WHOLESALE_MIN_QUANTITY} шт.</b>: <b>{tier_10['unit_rub']} ₽ / {format_usd(tier_10['unit_usd'])}$</b>\n"
         if product_code == GPT_ACCOUNT_PRODUCT_CODE
         else ""
     )
