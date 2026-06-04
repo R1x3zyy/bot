@@ -805,6 +805,23 @@ async def get_user_orders(user_id: int) -> list[dict]:
         return conn.execute("SELECT * FROM orders WHERE user_id = %s ORDER BY created_at", (user_id,)).fetchall()
 
 
+async def list_reserved_orders(product_code: str | None = None, limit: int = 50) -> list[dict]:
+    with get_conn() as conn:
+        product_filter = "AND product_code = %s" if product_code else ""
+        params: tuple = (product_code, limit) if product_code else (limit,)
+        return conn.execute(
+            f"""
+            SELECT *
+            FROM orders
+            WHERE status = 'Резерв, нет в наличии'
+              {product_filter}
+            ORDER BY created_at
+            LIMIT %s
+            """,
+            params,
+        ).fetchall()
+
+
 async def create_review(user_id: int, order_id: int, rating: int, comment: str) -> dict | None:
     with get_conn() as conn:
         order = conn.execute(

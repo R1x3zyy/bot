@@ -58,6 +58,7 @@ from db import (
     issue_links_to_order,
     list_active_crypto_payments,
     list_pending_platega_payments,
+    list_reserved_orders,
     list_users,
     record_channel_membership_event,
     record_bot_visit,
@@ -1432,6 +1433,37 @@ async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
             logging.exception("Could not send paid order to admin")
 
 
+async def process_reserved_orders(bot: Bot, product_code: str | None = None) -> int:
+    processed = 0
+    for order in await list_reserved_orders(product_code, 100):
+        quantity = quantity_from_order_title(str(order["product_title"]))
+        if await count_available_links(str(order["product_code"])) < quantity:
+            continue
+
+        lang = await get_lang(int(order["user_id"]))
+        issued = await deliver_order_links_to_user(
+            bot,
+            int(order["user_id"]),
+            int(order["id"]),
+            quantity,
+            lang,
+        )
+        if issued:
+            processed += 1
+            if ADMIN_ID and ADMIN_ID.isdigit():
+                try:
+                    await safe_bot_send_message(
+                        bot,
+                        int(ADMIN_ID),
+                        f"{ce('ok')} Резерв <b>#{order['id']}</b> автоматически выдан после пополнения склада.\n"
+                        f"Товар: <b>{html.escape(str(order['product_title']))}</b>\n"
+                        f"Пользователь: <code>{order['user_id']}</code>",
+                    )
+                except Exception:
+                    logging.exception("Could not notify admin about processed reserve %s", order["id"])
+    return processed
+
+
 async def auto_payment_watcher(bot: Bot) -> None:
     while True:
         try:
@@ -1463,6 +1495,10 @@ async def auto_payment_watcher(bot: Bot) -> None:
                         await notify_paid_payment(bot, completed, "Platega")
                 except Exception:
                     logging.exception("Could not auto-check Platega payment %s", payment.get("id"))
+            try:
+                await process_reserved_orders(bot)
+            except Exception:
+                logging.exception("Could not process reserved orders")
         except Exception:
             logging.exception("Payment watcher failed")
 
@@ -2094,9 +2130,11 @@ async def add_links_command(message: Message, state: FSMContext) -> None:
         return
 
     added = await add_links(links, PRODUCT_CODE)
+    processed = await process_reserved_orders(message.bot, PRODUCT_CODE) if added else 0
     await message.answer(
         f"Добавлено ссылок: <b>{added}</b>\n"
-        f"Теперь в наличии: <b>{await count_available_links(PRODUCT_CODE)}</b>"
+        f"Теперь в наличии: <b>{await count_available_links(PRODUCT_CODE)}</b>\n"
+        f"Выдано резервов: <b>{processed}</b>"
     )
 
 
@@ -2125,9 +2163,11 @@ async def add_accounts_command(
         return
 
     added = await add_links(accounts, product_code)
+    processed = await process_reserved_orders(message.bot, product_code) if added else 0
     await message.answer(
         f"Добавлено {item_name}: <b>{added}</b>\n"
-        f"Теперь в наличии: <b>{await count_available_links(product_code)}</b>"
+        f"Теперь в наличии: <b>{await count_available_links(product_code)}</b>\n"
+        f"Выдано резервов: <b>{processed}</b>"
     )
 
 
@@ -2263,6 +2303,7 @@ async def add_links_from_next_message(message: Message, state: FSMContext) -> No
     item_name = data.get("add_item_name") or "позиций"
     items = (message.text or "").splitlines()
     added = await add_links(items, product_code)
+    processed = await process_reserved_orders(message.bot, product_code) if added else 0
     await state.clear()
 
     if not added:
@@ -2275,7 +2316,8 @@ async def add_links_from_next_message(message: Message, state: FSMContext) -> No
 
     await message.answer(
         f"Добавлено {item_name}: <b>{added}</b>\n"
-        f"Теперь в наличии: <b>{await count_available_links(product_code)}</b>"
+        f"Теперь в наличии: <b>{await count_available_links(product_code)}</b>\n"
+        f"Выдано резервов: <b>{processed}</b>"
     )
 
 

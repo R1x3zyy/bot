@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 
-from bot import notify_paid_payment, payment_username
+from bot import notify_paid_payment, payment_username, process_reserved_orders
 from db import (
     add_links,
     admin_stats,
@@ -270,7 +270,14 @@ async def links_summary(product_code: str = "gemini_link_18_month", _: str = Dep
 @app.post("/api/links")
 async def create_links(payload: LinksPayload, _: str = Depends(check_auth)) -> dict:
     added = await add_links(payload.links.splitlines(), payload.product_code)
-    return {"added": added}
+    processed = 0
+    if added and BOT_TOKEN:
+        telegram_bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        try:
+            processed = await process_reserved_orders(telegram_bot, payload.product_code)
+        finally:
+            await telegram_bot.session.close()
+    return {"added": added, "processed_reserves": processed}
 
 
 @app.delete("/api/links/available")
