@@ -88,6 +88,7 @@ GPT_WHOLESALE_MIN_QUANTITY = 10
 GPT_WHOLESALE_UNIT_USD = Decimal("3.5")
 SUPPORT_USERNAME = "@R1x3zyy"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
+CUSTOM_EMOJI_RE = re.compile(r'<tg-emoji emoji-id="[^"]+">(.*?)</tg-emoji>')
 PROFILE_BANNER_PATH = os.path.join(os.path.dirname(__file__), "assets", "profile_banner.png")
 PRODUCT_ALIASES = {
     "link": PRODUCT_CODE,
@@ -138,6 +139,10 @@ CE = {
 def ce(name: str) -> str:
     emoji_id, fallback = CE[name]
     return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+
+
+def plain_custom_emoji(text: str) -> str:
+    return CUSTOM_EMOJI_RE.sub(lambda match: match.group(1), text)
 
 
 def format_price(product: dict) -> str:
@@ -196,10 +201,50 @@ async def answer_with_banner(
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> None:
     if os.path.exists(PROFILE_BANNER_PATH):
-        await message.answer_photo(FSInputFile(PROFILE_BANNER_PATH), caption=text, reply_markup=reply_markup)
+        try:
+            await message.answer_photo(FSInputFile(PROFILE_BANNER_PATH), caption=text, reply_markup=reply_markup)
+        except TelegramBadRequest as exc:
+            if "DOCUMENT_INVALID" not in str(exc):
+                raise
+            await message.answer_photo(
+                FSInputFile(PROFILE_BANNER_PATH),
+                caption=plain_custom_emoji(text),
+                reply_markup=reply_markup,
+            )
         return
 
-    await message.answer(text, reply_markup=reply_markup)
+    await safe_answer(message, text, reply_markup=reply_markup)
+
+
+async def safe_answer(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    try:
+        await message.answer(text, reply_markup=reply_markup)
+    except TelegramBadRequest as exc:
+        if "DOCUMENT_INVALID" not in str(exc):
+            raise
+        await message.answer(plain_custom_emoji(text), reply_markup=reply_markup)
+
+
+async def safe_bot_send_message(
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    parse_mode: ParseMode | str | None = None,
+) -> None:
+    kwargs: dict[str, Any] = {"reply_markup": reply_markup}
+    if parse_mode is not None:
+        kwargs["parse_mode"] = parse_mode
+    try:
+        await bot.send_message(chat_id, text, **kwargs)
+    except TelegramBadRequest as exc:
+        if "DOCUMENT_INVALID" not in str(exc):
+            raise
+        await bot.send_message(chat_id, plain_custom_emoji(text), **kwargs)
 
 
 async def edit_or_answer(
@@ -208,13 +253,18 @@ async def edit_or_answer(
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> None:
     if message.photo:
-        await message.answer(text, reply_markup=reply_markup)
+        await safe_answer(message, text, reply_markup=reply_markup)
         return
 
     try:
         await message.edit_text(text, reply_markup=reply_markup)
     except TelegramBadRequest:
-        await message.answer(text, reply_markup=reply_markup)
+        try:
+            await safe_answer(message, text, reply_markup=reply_markup)
+        except TelegramBadRequest as exc:
+            if "DOCUMENT_INVALID" not in str(exc):
+                raise
+            await safe_answer(message, plain_custom_emoji(text), reply_markup=reply_markup)
 
 
 def format_usd(value: Decimal) -> str:
@@ -1243,7 +1293,7 @@ async def deliver_order_links(
         product_code = str(links[0].get("product_code") or "")
         try:
             for text in delivery_text_chunks(links, lang, product_code):
-                await send_with_retry(lambda text=text: message.answer(text))
+                await send_with_retry(lambda text=text: safe_answer(message, text))
             caption = "Items as a file" if lang == "en" else "Товар файлом"
             await send_with_retry(lambda: message.answer_document(delivery_file(order_id, links), caption=caption))
         except Exception:
@@ -1277,7 +1327,7 @@ async def deliver_order_links_to_user(
         product_code = str(links[0].get("product_code") or "")
         try:
             for text in delivery_text_chunks(links, lang, product_code):
-                await send_with_retry(lambda text=text: bot.send_message(chat_id, text))
+                await send_with_retry(lambda text=text: safe_bot_send_message(bot, chat_id, text))
             caption = "Items as a file" if lang == "en" else "Товар файлом"
             await send_with_retry(lambda: bot.send_document(chat_id, delivery_file(order_id, links), caption=caption))
         except Exception:
@@ -1285,7 +1335,8 @@ async def deliver_order_links_to_user(
             logging.exception("Could not send delivered order %s to user %s", order_id, chat_id)
             if ADMIN_ID and ADMIN_ID.isdigit():
                 try:
-                    await bot.send_message(
+                    await safe_bot_send_message(
+                        bot,
                         int(ADMIN_ID),
                         f"⚠️ Заказ <b>#{order_id}</b> выдан в базе, но Telegram не отправил товар пользователю <code>{chat_id}</code>.\n"
                         f"Повторить: <code>/resendorder {order_id}</code>",
@@ -1322,7 +1373,13 @@ async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
             if lang == "en"
             else f"{ce('ok')} Баланс пополнен на <b>{amount} ₽</b>."
         )
-        await bot.send_message(int(payment["user_id"]), text, reply_markup=start_keyboard(lang), parse_mode=ParseMode.HTML)
+        await safe_bot_send_message(
+            bot,
+            int(payment["user_id"]),
+            text,
+            reply_markup=start_keyboard(lang),
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     quantity = int(payment["quantity"] or 1)
@@ -1347,7 +1404,13 @@ async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
             if lang == "en"
             else f"{ce('ok')} Оплата получена. Заказ создан и выдан."
         )
-    await bot.send_message(int(payment["user_id"]), text, reply_markup=start_keyboard(lang), parse_mode=ParseMode.HTML)
+    await safe_bot_send_message(
+        bot,
+        int(payment["user_id"]),
+        text,
+        reply_markup=start_keyboard(lang),
+        parse_mode=ParseMode.HTML,
+    )
 
     if ADMIN_ID:
         username = await payment_username(int(payment["user_id"]))
@@ -1362,7 +1425,7 @@ async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
             f"Контакт: {payment['contact']}"
         )
         try:
-            await bot.send_message(int(ADMIN_ID), admin_message, parse_mode=ParseMode.HTML)
+            await safe_bot_send_message(bot, int(ADMIN_ID), admin_message, parse_mode=ParseMode.HTML)
         except ValueError:
             logging.exception("ADMIN_ID must be a number")
         except Exception:
@@ -1853,45 +1916,58 @@ async def take_item_command(message: Message) -> None:
     )
 
 
-@router.message(Command("resendorder"))
+@router.message(F.text.regexp(r"(?i)^выдать\s+снова\s+\d+"))
+@router.message(F.text.regexp(r"(?i)^повторно\s+\d+"))
+@router.message(Command("resendorder", "resend"))
 async def resend_order_command(message: Message, bot: Bot) -> None:
     if not is_admin(message.from_user.id):
-        await message.answer("Эта команда доступна только администратору.")
+        await safe_answer(message, "Эта команда доступна только администратору.")
         return
 
-    parts = (message.text or "").split()
-    if len(parts) < 2:
-        await message.answer(
+    match = re.search(r"\d+", message.text or "")
+    if not match:
+        await safe_answer(
+            message,
             "Формат:\n"
             "<code>/resendorder order_id</code>\n\n"
-            "Пример: <code>/resendorder 73</code>"
+            "Примеры:\n"
+            "<code>/resendorder 126</code>\n"
+            "<code>/resend 126</code>\n"
+            "<code>выдать снова 126</code>"
         )
         return
 
-    try:
-        order_id = int(parts[1])
-    except ValueError:
-        await message.answer("ID заказа должен быть числом.")
-        return
-
+    order_id = int(match.group(0))
     order = await get_order(order_id)
     if not order:
-        await message.answer("Заказ не найден.")
+        await safe_answer(message, "Заказ не найден.")
         return
 
     quantity = quantity_from_order_title(str(order["product_title"]))
     links = await get_order_issued_links(order_id, quantity)
     if not links:
-        await message.answer("У этого заказа нет уже выданного товара для повторной отправки.")
+        await safe_answer(message, "У этого заказа нет уже выданного товара для повторной отправки.")
         return
 
     lang = await get_lang(int(order["user_id"]))
-    for text in delivery_text_chunks(links, lang, str(order["product_code"])):
-        await send_with_retry(lambda text=text: bot.send_message(order["user_id"], text))
-    caption = "Items as a file" if lang == "en" else "Товар файлом"
-    await send_with_retry(lambda: bot.send_document(order["user_id"], delivery_file(order_id, links), caption=caption))
+    try:
+        for text in delivery_text_chunks(links, lang, str(order["product_code"])):
+            await send_with_retry(lambda text=text: safe_bot_send_message(bot, int(order["user_id"]), text))
+        caption = "Items as a file" if lang == "en" else "Товар файлом"
+        await send_with_retry(lambda: bot.send_document(int(order["user_id"]), delivery_file(order_id, links), caption=caption))
+    except Exception as exc:
+        await update_order_status(order_id, "Выдан, нужна повторная отправка")
+        logging.exception("Could not resend order %s to user %s", order_id, order["user_id"])
+        await safe_answer(
+            message,
+            f"Не удалось повторно отправить заказ <b>#{order_id}</b> пользователю <code>{order['user_id']}</code>.\n"
+            f"Ошибка: <code>{html.escape(str(exc))[:500]}</code>"
+        )
+        return
+
     await update_order_status(order_id, "Выдан автоматически")
-    await message.answer(
+    await safe_answer(
+        message,
         f"{ce('ok')} Заказ <b>#{order_id}</b> повторно отправлен пользователю <code>{order['user_id']}</code>.\n"
         f"Позиций: <b>{len(links)}</b>"
     )
@@ -3404,6 +3480,7 @@ async def main() -> None:
                 BotCommand(command="giveitem", description="Выдать товар пользователю"),
                 BotCommand(command="takeitem", description="Забрать товар себе"),
                 BotCommand(command="resendorder", description="Повторно отправить заказ"),
+                BotCommand(command="resend", description="Повторно отправить заказ"),
                 BotCommand(command="setprice", description="Поменять цену товара"),
                 BotCommand(command="addlinks", description="Добавить ссылки"),
                 BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),
