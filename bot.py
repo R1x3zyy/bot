@@ -1162,6 +1162,43 @@ def delivery_text(links: list[dict], lang: str = "ru", product_code: str = "") -
     )
 
 
+def delivery_text_chunks(links: list[dict], lang: str = "ru", product_code: str = "") -> list[str]:
+    if len(delivery_text(links, lang, product_code)) <= 3500:
+        return [delivery_text(links, lang, product_code)]
+
+    if product_code == GPT_ACCOUNT_PRODUCT_CODE:
+        notice = gpt_account_notice(lang)
+    elif product_code == SUPERGROK_PRODUCT_CODE:
+        notice = supergrok_account_notice(lang)
+    else:
+        notice = ""
+
+    title = f"{ce('ok')} <b>Your items</b>" if lang == "en" else f"{ce('ok')} <b>Ваши товары</b>"
+    chunks: list[str] = []
+    current_lines: list[str] = []
+
+    for index, link in enumerate(links, start=1):
+        line = f"{index}. <code>{html.escape(str(link['url']))}</code>"
+        candidate = f"{title}\n\n" + "\n".join(current_lines + [line])
+        if current_lines and len(candidate) > 3500:
+            chunks.append(f"{title}\n\n" + "\n".join(current_lines))
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        last = f"{title}\n\n" + "\n".join(current_lines)
+        if notice and len(last + notice) <= 3500:
+            last += notice
+        else:
+            if notice:
+                chunks.append(last)
+                last = notice.strip()
+        chunks.append(last)
+
+    return chunks
+
+
 def delivery_file(order_id: int, links: list[dict]) -> BufferedInputFile:
     content = "\n".join(str(link["url"]) for link in links)
     filename = f"order_{order_id}_items.txt"
@@ -1205,7 +1242,8 @@ async def deliver_order_links(
     if links:
         product_code = str(links[0].get("product_code") or "")
         try:
-            await send_with_retry(lambda: message.answer(delivery_text(links, lang, product_code)))
+            for text in delivery_text_chunks(links, lang, product_code):
+                await send_with_retry(lambda text=text: message.answer(text))
             caption = "Items as a file" if lang == "en" else "Товар файлом"
             await send_with_retry(lambda: message.answer_document(delivery_file(order_id, links), caption=caption))
         except Exception:
@@ -1238,7 +1276,8 @@ async def deliver_order_links_to_user(
     if links:
         product_code = str(links[0].get("product_code") or "")
         try:
-            await send_with_retry(lambda: bot.send_message(chat_id, delivery_text(links, lang, product_code)))
+            for text in delivery_text_chunks(links, lang, product_code):
+                await send_with_retry(lambda text=text: bot.send_message(chat_id, text))
             caption = "Items as a file" if lang == "en" else "Товар файлом"
             await send_with_retry(lambda: bot.send_document(chat_id, delivery_file(order_id, links), caption=caption))
         except Exception:
@@ -1847,7 +1886,8 @@ async def resend_order_command(message: Message, bot: Bot) -> None:
         return
 
     lang = await get_lang(int(order["user_id"]))
-    await send_with_retry(lambda: bot.send_message(order["user_id"], delivery_text(links, lang, str(order["product_code"]))))
+    for text in delivery_text_chunks(links, lang, str(order["product_code"])):
+        await send_with_retry(lambda text=text: bot.send_message(order["user_id"], text))
     caption = "Items as a file" if lang == "en" else "Товар файлом"
     await send_with_retry(lambda: bot.send_document(order["user_id"], delivery_file(order_id, links), caption=caption))
     await update_order_status(order_id, "Выдан автоматически")
