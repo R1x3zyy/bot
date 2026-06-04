@@ -1064,10 +1064,11 @@ async def daily_business_stats() -> dict:
                 count(*)::int AS count,
                 COALESCE(sum(purchase_cost_usd), 0) AS cost_usd
             FROM links
+            LEFT JOIN orders ON orders.id = links.order_id
             WHERE is_issued = TRUE
                 AND issued_at IS NOT NULL
                 AND (%s = '' OR issued_to IS DISTINCT FROM %s::bigint)
-                AND (issued_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
+                AND (COALESCE(orders.created_at, issued_at) AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
             """,
             (ADMIN_ID, ADMIN_ID or "0", REPORT_TZ, REPORT_TZ),
         ).fetchone()
@@ -1133,13 +1134,14 @@ async def business_stats_by_days(days: int = 30) -> list[dict]:
         issued_rows = conn.execute(
             """
             SELECT
-                (issued_at AT TIME ZONE %s)::date AS day,
+                (COALESCE(orders.created_at, links.issued_at) AT TIME ZONE %s)::date AS day,
                 count(*)::int AS count,
-                COALESCE(sum(purchase_cost_usd), 0) AS cost_usd
+                COALESCE(sum(links.purchase_cost_usd), 0) AS cost_usd
             FROM links
+            LEFT JOIN orders ON orders.id = links.order_id
             WHERE is_issued = TRUE
                 AND issued_at IS NOT NULL
-                AND (issued_at AT TIME ZONE %s)::date >= (now() AT TIME ZONE %s)::date - (%s::int - 1)
+                AND (COALESCE(orders.created_at, links.issued_at) AT TIME ZONE %s)::date >= (now() AT TIME ZONE %s)::date - (%s::int - 1)
                 AND (%s = '' OR issued_to IS DISTINCT FROM %s::bigint)
             GROUP BY day
             """,
