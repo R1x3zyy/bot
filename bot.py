@@ -87,7 +87,8 @@ GEMINI_ACCOUNT_PRODUCT_CODE = "gemini_account_12_month"
 SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
 GPT_WHOLESALE_MIN_QUANTITY = 10
 GPT_WHOLESALE_UNIT_USD = Decimal("3.5")
-SUPPORT_USERNAME = "@R1x3zyy"
+SUPPORT_USERNAME = "@AutoGeminiSupport"
+SUPPORT_URL = "https://t.me/AutoGeminiSupport"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
 CUSTOM_EMOJI_RE = re.compile(r'<tg-emoji emoji-id="[^"]+">(.*?)</tg-emoji>')
 PROFILE_BANNER_PATH = os.path.join(os.path.dirname(__file__), "assets", "profile_banner.png")
@@ -740,7 +741,7 @@ def help_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     home_text = "🏠 Home" if lang == "en" else "🏠 На главную"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/R1x3zyy")],
+            [InlineKeyboardButton(text="💬 Поддержка", url=SUPPORT_URL)],
             [InlineKeyboardButton(text=home_text, callback_data="menu:home")],
         ]
     )
@@ -763,7 +764,7 @@ def misc_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
         back_text = "🔙 Назад"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=support_text, url="https://t.me/R1x3zyy")],
+            [InlineKeyboardButton(text=support_text, url=SUPPORT_URL)],
             [
                 InlineKeyboardButton(text=channel_text, url="https://t.me/r1x3zyyshop"),
                 InlineKeyboardButton(text=reviews_text, callback_data="misc:reviews"),
