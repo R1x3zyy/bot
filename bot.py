@@ -1,5 +1,6 @@
 import asyncio
 import html
+import json
 import logging
 import os
 import re
@@ -321,7 +322,16 @@ async def cryptobot_request(method: str, payload: dict | None = None) -> dict:
     headers = {"Crypto-Pay-API-Token": CRYPTOBOT_TOKEN}
     async with aiohttp.ClientSession(headers=headers) as session:
         async with session.post(url, json=payload or {}) as response:
-            data = await response.json(content_type=None)
+            raw_text = await response.text()
+
+    try:
+        data = json.loads(raw_text) if raw_text else {}
+    except json.JSONDecodeError as exc:
+        snippet = raw_text[:200].replace("\n", " ").replace("\r", " ")
+        raise RuntimeError(
+            f"CryptoBot API returned non-JSON response for {method}: "
+            f"status={response.status}, body={snippet!r}"
+        ) from exc
 
     if not data.get("ok"):
         raise RuntimeError(data.get("error") or "CryptoBot API error")
