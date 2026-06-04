@@ -1344,7 +1344,7 @@ async def deliver_order_links_to_user(
                     )
                 except Exception:
                     logging.exception("Could not notify admin about failed delivery")
-            return links
+            return []
         if with_review:
             review_text = (
                 f"{ce('news_pencil')} How was your purchase? You can leave a review."
