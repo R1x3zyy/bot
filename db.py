@@ -148,6 +148,12 @@ async def ensure_schema() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
 
+            CREATE TABLE IF NOT EXISTS bot_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT '',
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+
             CREATE TABLE IF NOT EXISTS platega_payments (
                 id BIGSERIAL PRIMARY KEY,
                 user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1260,3 +1266,27 @@ async def update_product_config(
             """,
             (code, title, price_rub, price_usd, description),
         ).fetchone()
+
+
+async def get_bot_setting(key: str, default: str = "") -> str:
+    await ensure_schema()
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM bot_settings WHERE key = %s", (key,)).fetchone()
+        return str(row["value"]) if row else default
+
+
+async def set_bot_setting(key: str, value: str) -> str:
+    await ensure_schema()
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO bot_settings (key, value, updated_at)
+            VALUES (%s, %s, now())
+            ON CONFLICT (key) DO UPDATE
+            SET value = EXCLUDED.value,
+                updated_at = now()
+            RETURNING value
+            """,
+            (key, value),
+        ).fetchone()
+        return str(row["value"])

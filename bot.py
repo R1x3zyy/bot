@@ -46,6 +46,7 @@ from db import (
     create_review,
     ensure_schema,
     ensure_user,
+    get_bot_setting,
     get_crypto_payment,
     get_order,
     get_platega_payment,
@@ -63,6 +64,7 @@ from db import (
     list_users,
     record_channel_membership_event,
     record_bot_visit,
+    set_bot_setting,
     update_user_language,
     update_product_config,
     update_order_status,
@@ -201,6 +203,24 @@ def resolve_product_code(value: str) -> str:
     normalized = value.strip().lower().replace("-", "_")
     normalized = normalized.replace(" ", "_")
     return PRODUCT_ALIASES.get(normalized, normalized)
+
+
+async def get_reviews_channel_id() -> str:
+    return await get_bot_setting("reviews_channel_id", REVIEWS_CHANNEL_ID or "")
+
+
+def forwarded_chat_id(message: Message) -> str:
+    source = message.reply_to_message or message
+    forward_from_chat = getattr(source, "forward_from_chat", None)
+    if forward_from_chat and getattr(forward_from_chat, "id", None):
+        return str(forward_from_chat.id)
+
+    forward_origin = getattr(source, "forward_origin", None)
+    origin_chat = getattr(forward_origin, "chat", None)
+    if origin_chat and getattr(origin_chat, "id", None):
+        return str(origin_chat.id)
+
+    return ""
 
 
 def quantity_from_order_title(title: str) -> int:
@@ -2070,6 +2090,60 @@ async def resend_order_command(message: Message, bot: Bot) -> None:
     )
 
 
+@router.message(Command("setreviews"))
+async def set_reviews_channel_command(message: Message, bot: Bot) -> None:
+    if not is_admin(message.from_user.id):
+        await safe_answer(message, "Эта команда доступна только администратору.")
+        return
+
+    args = (message.text or "").split(maxsplit=1)
+    channel_id = args[1].strip() if len(args) > 1 else forwarded_chat_id(message)
+
+    if channel_id.startswith("https://t.me/+") or channel_id.startswith("http://t.me/+"):
+        await safe_answer(
+            message,
+            "По invite-ссылке приватный канал привязать нельзя.\n\n"
+            "Сделайте так:\n"
+            "1. Добавьте бота админом в канал.\n"
+            "2. Опубликуйте любой пост в канале.\n"
+            "3. Перешлите этот пост мне в личку и ответьте на него командой <code>/setreviews</code>.\n\n"
+            "Или пришлите числовой ID канала вида <code>-100...</code>."
+        )
+        return
+
+    if not channel_id:
+        await safe_answer(
+            message,
+            "Формат:\n"
+            "<code>/setreviews @channel_username</code>\n"
+            "<code>/setreviews -1001234567890</code>\n\n"
+            "Для приватного канала: добавьте бота админом, перешлите пост из канала и ответьте на него командой <code>/setreviews</code>."
+        )
+        return
+
+    chat_id: int | str = int(channel_id) if re.fullmatch(r"-?\d+", channel_id) else channel_id
+    try:
+        chat = await bot.get_chat(chat_id)
+        await bot.send_message(chat_id, f"{ce('ok')} Канал отзывов подключен.")
+    except Exception as exc:
+        logging.exception("Could not connect reviews channel %s", channel_id)
+        await safe_answer(
+            message,
+            "Не удалось подключить канал отзывов.\n\n"
+            "Проверьте, что бот добавлен в канал администратором и у него есть право публиковать сообщения.\n"
+            f"Ошибка: <code>{html.escape(str(exc))[:500]}</code>"
+        )
+        return
+
+    saved = await set_bot_setting("reviews_channel_id", str(chat.id))
+    title = html.escape(getattr(chat, "title", "") or str(saved))
+    await safe_answer(
+        message,
+        f"{ce('ok')} Канал отзывов привязан: <b>{title}</b>\n"
+        f"ID: <code>{saved}</code>"
+    )
+
+
 @router.message(Command("setprice"))
 async def set_price_command(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id):
@@ -2527,9 +2601,11 @@ async def receive_review_comment(message: Message, state: FSMContext, bot: Bot) 
         f"{html.escape(comment)}"
     )
 
-    if REVIEWS_CHANNEL_ID:
+    reviews_channel_id = await get_reviews_channel_id()
+    if reviews_channel_id:
         try:
-            await bot.send_message(REVIEWS_CHANNEL_ID, channel_text)
+            chat_id: int | str = int(reviews_channel_id) if re.fullmatch(r"-?\d+", reviews_channel_id) else reviews_channel_id
+            await bot.send_message(chat_id, channel_text)
         except Exception:
             logging.exception("Could not send review to channel")
             if ADMIN_ID:
@@ -3584,6 +3660,7 @@ async def main() -> None:
                 BotCommand(command="takeitem", description="Забрать товар себе"),
                 BotCommand(command="resendorder", description="Повторно отправить заказ"),
                 BotCommand(command="resend", description="Повторно отправить заказ"),
+                BotCommand(command="setreviews", description="Set reviews channel"),
                 BotCommand(command="setprice", description="Поменять цену товара"),
                 BotCommand(command="addlinks", description="Добавить ссылки"),
                 BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),
