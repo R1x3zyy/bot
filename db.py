@@ -233,13 +233,13 @@ async def ensure_schema() -> None:
             ),
             (
                 SUPERGROK_PRODUCT_CODE,
-                "SUPERGROK 1 month [25 дней ГАРАНТИЯ]",
+                "SUPERGROK 1 month [30 дней ГАРАНТИЯ]",
                 Decimal("290.00"),
                 Decimal("4.00"),
                 (
                     f"{'💰'} Цена: 4.00 USD\n"
                     f"{'⏳'} Срок действия: 1 месяц\n"
-                    f"{'🛡️'} Гарантия: 25 дней\n"
+                    f"{'🛡️'} Гарантия: 30 дней\n"
                     f"{'📦'} Доставка: READY_ACCOUNT\n\n"
                     "Что входит в комплект:\n"
                     "- email для входа;\n"

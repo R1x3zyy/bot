@@ -117,7 +117,7 @@ const PRODUCT_OPTIONS = [
   { code: 'gemini_link_18_month', title: 'Gemini Link 18 months' },
   { code: 'gpt_account_full_warranty', title: 'GPT account full warranty' },
   { code: 'gemini_account_12_month', title: 'Gemini account 12 month' },
-  { code: 'supergrok_1_month', title: 'SUPERGROK 1 month [25 дней ГАРАНТИЯ]' },
+  { code: 'supergrok_1_month', title: 'SUPERGROK 1 month [30 дней ГАРАНТИЯ]' },
 ];
 
 const ORDER_STATUSES = [
