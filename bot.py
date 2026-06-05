@@ -88,6 +88,12 @@ GEMINI_ACCOUNT_PRODUCT_CODE = "gemini_account_12_month"
 SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
 GPT_WHOLESALE_MIN_QUANTITY = 10
 GPT_WHOLESALE_UNIT_USD = Decimal("3.5")
+GROK_WHOLESALE_MIN_QUANTITY = 5
+GROK_WHOLESALE_UNIT_USD = Decimal("5.5")
+WHOLESALE_TIERS = {
+    GPT_ACCOUNT_PRODUCT_CODE: [(GPT_WHOLESALE_MIN_QUANTITY, GPT_WHOLESALE_UNIT_USD)],
+    SUPERGROK_PRODUCT_CODE: [(GROK_WHOLESALE_MIN_QUANTITY, GROK_WHOLESALE_UNIT_USD)],
+}
 SUPPORT_USERNAME = "@AutoGeminiSupport"
 SUPPORT_URL = "https://t.me/AutoGeminiSupport"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
@@ -274,13 +280,22 @@ def format_usd(value: Decimal) -> str:
     return f"{value.normalize():f}"
 
 
+def wholesale_tiers(product_code: str) -> list[tuple[int, Decimal]]:
+    return sorted(WHOLESALE_TIERS.get(product_code, []), key=lambda tier: tier[0])
+
+
+def wholesale_unit_usd(product_code: str, quantity: int, base_usd: Decimal) -> Decimal:
+    unit_usd = base_usd
+    for min_quantity, tier_unit_usd in wholesale_tiers(product_code):
+        if quantity >= min_quantity:
+            unit_usd = tier_unit_usd
+    return unit_usd
+
+
 def calculate_order_price(product: dict, quantity: int) -> dict[str, Decimal | int]:
     base_rub = Decimal(str(product["price_rub"]))
     base_usd = Decimal(str(product["price_usd"]))
-    unit_usd = base_usd
-
-    if product.get("code") == GPT_ACCOUNT_PRODUCT_CODE and quantity >= GPT_WHOLESALE_MIN_QUANTITY:
-        unit_usd = GPT_WHOLESALE_UNIT_USD
+    unit_usd = wholesale_unit_usd(str(product.get("code") or ""), quantity, base_usd)
 
     if base_usd > 0:
         unit_rub = (base_rub / base_usd * unit_usd).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
@@ -292,6 +307,26 @@ def calculate_order_price(product: dict, quantity: int) -> dict[str, Decimal | i
         "unit_usd": unit_usd,
         "total_rub": int(unit_rub) * quantity,
     }
+
+
+def wholesale_text(product: dict, lang: str = "ru") -> str:
+    lines = []
+    for min_quantity, _unit_usd in wholesale_tiers(str(product.get("code") or "")):
+        tier_price = calculate_order_price(product, min_quantity)
+        if lang == "en":
+            lines.append(
+                f"{ce('fire')} From <b>{min_quantity} pcs.</b>: "
+                f"<b>{tier_price['unit_rub']} ₽ / {format_usd(tier_price['unit_usd'])}$</b> per item"
+            )
+        else:
+            lines.append(
+                f"{ce('fire')} Опт от <b>{min_quantity} шт.</b>: "
+                f"<b>{tier_price['unit_rub']} ₽ / {format_usd(tier_price['unit_usd'])}$</b> за 1 шт."
+            )
+    if not lines:
+        return ""
+    title = "Wholesale price:" if lang == "en" else "Оптовая цена:"
+    return f"{ce('news_money')} <b>{title}</b>\n" + "\n".join(lines) + "\n"
 
 
 def balance_topup_text(balance: int, required: int, lang: str = "ru") -> str:
@@ -909,6 +944,9 @@ async def product_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> st
     product = await get_product_config(product_code)
     stock = await count_available_links(product_code)
     price = format_price(product)
+    wholesale = wholesale_text(product, lang)
+    if wholesale:
+        price = f"{price}\n{wholesale}".rstrip()
 
     if lang == "en":
         return (
@@ -1520,23 +1558,13 @@ async def quantity_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> s
     product = await get_product_config(product_code)
     stock = await count_available_links(product_code)
     pricing = calculate_order_price(product, 1)
-    tier_10 = calculate_order_price(product, GPT_WHOLESALE_MIN_QUANTITY)
-    wholesale_en = (
-        f"{ce('fire')} From <b>{GPT_WHOLESALE_MIN_QUANTITY} pcs.</b>: <b>{tier_10['unit_rub']} ₽ / {format_usd(tier_10['unit_usd'])}$</b>\n"
-        if product_code == GPT_ACCOUNT_PRODUCT_CODE
-        else ""
-    )
-    wholesale_ru = (
-        f"{ce('fire')} От <b>{GPT_WHOLESALE_MIN_QUANTITY} шт.</b>: <b>{tier_10['unit_rub']} ₽ / {format_usd(tier_10['unit_usd'])}$</b>\n"
-        if product_code == GPT_ACCOUNT_PRODUCT_CODE
-        else ""
-    )
+    wholesale = wholesale_text(product, lang)
     if lang == "en":
         return (
             f"🔢 <b>Choose quantity</b>\n\n"
             f"{product_icon(product_code)} Product: <b>{product['title']}</b>\n"
             f"{ce('news_money')} Price per item: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
-            f"{wholesale_en}"
+            f"{wholesale}"
             f"{ce('stock')} In stock: <b>{stock} pcs.</b>\n\n"
             "Choose quantity below or press <b>Custom quantity</b>."
         )
@@ -1545,7 +1573,7 @@ async def quantity_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> s
         f"🔢 <b>Выберите количество</b>\n\n"
         f"{product_icon(product_code)} Товар: <b>{product['title']}</b>\n"
         f"{ce('news_money')} Цена за 1 шт.: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
-        f"{wholesale_ru}"
+        f"{wholesale}"
         f"{ce('stock')} В наличии: <b>{stock} шт.</b>\n\n"
         "Выберите количество ниже или нажмите <b>Своё количество</b>."
     )
