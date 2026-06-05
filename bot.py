@@ -154,6 +154,12 @@ def plain_custom_emoji(text: str) -> str:
     return CUSTOM_EMOJI_RE.sub(lambda match: match.group(1), text)
 
 
+def plain_telegram_text(text: str) -> str:
+    text = plain_custom_emoji(text)
+    text = re.sub(r"</?(?:b|i|u|s|code|pre|blockquote)>", "", text)
+    return html.unescape(text)
+
+
 def format_price(product: dict) -> str:
     price_rub = int(product["price_rub"])
     price_usd = float(product["price_usd"])
@@ -233,9 +239,18 @@ async def safe_answer(
     try:
         await message.answer(text, reply_markup=reply_markup)
     except TelegramBadRequest as exc:
-        if "DOCUMENT_INVALID" not in str(exc):
+        error_text = str(exc)
+        if "DOCUMENT_INVALID" in error_text:
+            await message.answer(plain_custom_emoji(text), reply_markup=reply_markup)
+            return
+        if "ENTITY_TEXT_INVALID" in error_text:
+            await message.answer(plain_telegram_text(text), reply_markup=reply_markup, parse_mode=None)
+            return
+        if "can't parse entities" in error_text:
+            await message.answer(plain_telegram_text(text), reply_markup=reply_markup, parse_mode=None)
+            return
+        else:
             raise
-        await message.answer(plain_custom_emoji(text), reply_markup=reply_markup)
 
 
 async def safe_bot_send_message(
@@ -251,9 +266,16 @@ async def safe_bot_send_message(
     try:
         await bot.send_message(chat_id, text, **kwargs)
     except TelegramBadRequest as exc:
-        if "DOCUMENT_INVALID" not in str(exc):
+        error_text = str(exc)
+        if "DOCUMENT_INVALID" in error_text:
+            await bot.send_message(chat_id, plain_custom_emoji(text), **kwargs)
+            return
+        if "ENTITY_TEXT_INVALID" in error_text or "can't parse entities" in error_text:
+            kwargs["parse_mode"] = None
+            await bot.send_message(chat_id, plain_telegram_text(text), **kwargs)
+            return
+        else:
             raise
-        await bot.send_message(chat_id, plain_custom_emoji(text), **kwargs)
 
 
 async def edit_or_answer(
