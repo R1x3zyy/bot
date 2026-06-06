@@ -78,6 +78,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 REVIEWS_CHANNEL_ID = os.getenv("REVIEWS_CHANNEL_ID")
+REVIEWS_CHANNEL_URL = os.getenv("REVIEWS_CHANNEL_URL", "https://t.me/+97u-tZJLgE5jZjNi")
 REQUIRED_CHANNEL_ID = os.getenv("REQUIRED_CHANNEL_ID", "@r1x3zyyshop")
 REQUIRED_CHANNEL_URL = os.getenv("REQUIRED_CHANNEL_URL", "https://t.me/r1x3zyyshop")
 CRYPTOBOT_TOKEN = os.getenv("CRYPTOBOT_TOKEN")
@@ -858,7 +859,7 @@ def misc_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=support_text, url=SUPPORT_URL)],
             [
                 InlineKeyboardButton(text=channel_text, url="https://t.me/r1x3zyyshop"),
-                InlineKeyboardButton(text=reviews_text, callback_data="misc:reviews"),
+                InlineKeyboardButton(text=reviews_text, url=REVIEWS_CHANNEL_URL),
             ],
             [InlineKeyboardButton(text=privacy_text, callback_data="misc:privacy")],
             [InlineKeyboardButton(text=terms_text, callback_data="misc:terms")],
