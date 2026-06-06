@@ -32,6 +32,7 @@ from dotenv import load_dotenv
 
 from db import (
     add_links,
+    add_user_balance,
     admin_stats,
     cancel_crypto_payment,
     cancel_platega_payment,
@@ -1981,6 +1982,90 @@ async def give_item_command(message: Message, bot: Bot) -> None:
     )
 
 
+@router.message(Command("addbalance"))
+async def add_balance_command(message: Message, bot: Bot) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    parts = (message.text or "").split(maxsplit=3)
+    if len(parts) < 3:
+        await message.answer(
+            "Формат:\n"
+            "<code>/addbalance user_id сумма</code>\n"
+            "<code>/addbalance @username сумма</code>\n\n"
+            "Примеры:\n"
+            "<code>/addbalance @username 500</code>\n"
+            "<code>/addbalance 123456789 500</code>"
+        )
+        return
+
+    target = parts[1].strip()
+    try:
+        amount_rub = int(parts[2])
+    except ValueError:
+        await message.answer("Сумма должна быть числом в рублях.")
+        return
+
+    if amount_rub <= 0:
+        await message.answer("Сумма должна быть больше 0.")
+        return
+
+    target_label = target
+    if target.startswith("@"):
+        target_user = await get_user_by_username(target)
+        if not target_user:
+            await message.answer(
+                "Пользователь не найден в базе бота.\n\n"
+                "Он должен хотя бы один раз написать /start боту, после этого можно пополнять баланс по @username."
+            )
+            return
+        target_user_id = int(target_user["id"])
+        target_label = f"@{target_user['username']}" if target_user["username"] else str(target_user_id)
+    else:
+        try:
+            target_user_id = int(target)
+        except ValueError:
+            await message.answer("Укажите пользователя как ID или @username.")
+            return
+        target_user = await get_user(target_user_id)
+        if not target_user:
+            await message.answer(
+                "Пользователь не найден в базе бота.\n\n"
+                "Он должен хотя бы один раз написать /start боту."
+            )
+            return
+        if target_user["username"]:
+            target_label = f"@{target_user['username']}"
+
+    note = parts[3].strip() if len(parts) >= 4 else ""
+    description = f"Admin top-up by {message.from_user.id}"
+    if note:
+        description = f"{description}: {note[:200]}"
+
+    await add_user_balance(target_user_id, amount_rub, description)
+    updated_user = await get_user(target_user_id)
+    new_balance = int(updated_user["balance"]) if updated_user else 0
+
+    await message.answer(
+        f"{ce('ok')} Баланс пополнен.\n\n"
+        f"Пользователь: <code>{html.escape(str(target_label))}</code>\n"
+        f"Сумма: <b>{amount_rub} ₽</b>\n"
+        f"Новый баланс: <b>{new_balance} ₽</b>"
+    )
+
+    try:
+        await safe_bot_send_message(
+            bot,
+            target_user_id,
+            f"{ce('news_money')} <b>Баланс пополнен</b>\n\n"
+            f"Сумма: <b>{amount_rub} ₽</b>\n"
+            f"Ваш баланс: <b>{new_balance} ₽</b>",
+        )
+    except Exception:
+        logging.exception("Could not notify user %s about admin balance top-up", target_user_id)
+
+
 @router.message(Command("takeitem"))
 async def take_item_command(message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -3666,6 +3751,7 @@ async def main() -> None:
                 BotCommand(command="stats", description="Статистика бота"),
                 BotCommand(command="daystats", description="Статистика за день"),
                 BotCommand(command="giveitem", description="Выдать товар пользователю"),
+                BotCommand(command="addbalance", description="Пополнить баланс пользователю"),
                 BotCommand(command="takeitem", description="Забрать товар себе"),
                 BotCommand(command="resendorder", description="Повторно отправить заказ"),
                 BotCommand(command="resend", description="Повторно отправить заказ"),
