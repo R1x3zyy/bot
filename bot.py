@@ -647,6 +647,7 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🛍 Catalog", callback_data="catalog:open"),
                 InlineKeyboardButton(text="👤 Profile", callback_data="profile:open"),
             ],
+            [InlineKeyboardButton(text="✏️ Reviews", url=REVIEWS_CHANNEL_URL)],
             [InlineKeyboardButton(text="⚙️ Other", callback_data="misc:open")],
             [InlineKeyboardButton(text="🌐 Language", callback_data="profile:language")],
         ]
@@ -656,6 +657,7 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog:open"),
                 InlineKeyboardButton(text="👤 Профиль", callback_data="profile:open"),
             ],
+            [InlineKeyboardButton(text="✏️ Отзывы", url=REVIEWS_CHANNEL_URL)],
             [InlineKeyboardButton(text="⚙️ Прочее", callback_data="misc:open")],
             [InlineKeyboardButton(text="🌐 Язык / Language", callback_data="profile:language")],
         ]
@@ -843,24 +845,19 @@ def misc_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     if lang == "en":
         support_text = "💬 Support"
         channel_text = "📣 Our channel"
-        reviews_text = "✏️ Reviews"
         privacy_text = "🛡 Privacy policy"
         terms_text = "⚙️ User agreement"
         back_text = "🔙 Back"
     else:
         support_text = "💬 Тех поддержка"
         channel_text = "📣 Наш канал"
-        reviews_text = "✏️ Отзывы"
         privacy_text = "🛡 Политика конфид."
         terms_text = "⚙️ Польз. соглашение"
         back_text = "🔙 Назад"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=support_text, url=SUPPORT_URL)],
-            [
-                InlineKeyboardButton(text=channel_text, url="https://t.me/r1x3zyyshop"),
-                InlineKeyboardButton(text=reviews_text, url=REVIEWS_CHANNEL_URL),
-            ],
+            [InlineKeyboardButton(text=channel_text, url="https://t.me/r1x3zyyshop")],
             [InlineKeyboardButton(text=privacy_text, callback_data="misc:privacy")],
             [InlineKeyboardButton(text=terms_text, callback_data="misc:terms")],
             [InlineKeyboardButton(text=back_text, callback_data="menu:home")],
