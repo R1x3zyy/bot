@@ -449,6 +449,8 @@ async def channel_leave_stats(days: int = 14, limit: int = 50) -> dict:
 def purchase_cost_for_product(product_code: str) -> Decimal:
     if product_code == GPT_ACCOUNT_PRODUCT_CODE:
         return Decimal("1.50")
+    if product_code == SUPERGROK_PRODUCT_CODE:
+        return Decimal("4.00")
     return NEW_LINK_COST_USD
 
 
