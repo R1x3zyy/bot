@@ -1259,6 +1259,7 @@ def gpt_account_notice(lang: str = "ru") -> str:
         return (
             f"\n\n{ce('news_shield')} <b>Important:</b> use the email and password exactly as provided. "
             "Do not change the email or password, and do not enable 2FA. "
+            "If the account details are changed, the warranty will not apply. "
             "Use a reliable proxy or a good VPN for stable access. "
             "If you have any login issue, contact support before making changes."
         )
@@ -1266,6 +1267,7 @@ def gpt_account_notice(lang: str = "ru") -> str:
     return (
         f"\n\n{ce('news_shield')} <b>Важно:</b> используйте email и пароль строго в том виде, в котором они выданы. "
         "Не меняйте email, пароль и не включайте 2FA. "
+        "Если данные аккаунта были изменены, гарантия не действует. "
         "Для стабильного использования используйте хороший прокси или хороший VPN. "
         "Если возникла проблема со входом, сначала напишите в поддержку и не вносите изменения самостоятельно."
     )
