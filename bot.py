@@ -1257,15 +1257,17 @@ async def send_platega_invoice(
 def gpt_account_notice(lang: str = "ru") -> str:
     if lang == "en":
         return (
-            f"\n\n{ce('news_shield')} <b>Important:</b> after logging in, change the account details immediately. "
+            f"\n\n{ce('news_shield')} <b>Important:</b> use the email and password exactly as provided. "
+            "Do not change the email or password, and do not enable 2FA. "
             "Use a reliable proxy or a good VPN for stable access. "
-            "If the details are not changed and then someone changes access to the account, the warranty will no longer apply."
+            "If you have any login issue, contact support before making changes."
         )
 
     return (
-        f"\n\n{ce('news_shield')} <b>Важно:</b> после входа сразу поменяйте данные аккаунта. "
+        f"\n\n{ce('news_shield')} <b>Важно:</b> используйте email и пароль строго в том виде, в котором они выданы. "
+        "Не меняйте email, пароль и не включайте 2FA. "
         "Для стабильного использования используйте хороший прокси или хороший VPN. "
-        "Если данные не поменяли, а затем у аккаунта изменили доступ, гарантия слетает."
+        "Если возникла проблема со входом, сначала напишите в поддержку и не вносите изменения самостоятельно."
     )
 
 
