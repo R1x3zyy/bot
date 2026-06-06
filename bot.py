@@ -1257,19 +1257,21 @@ async def send_platega_invoice(
 def gpt_account_notice(lang: str = "ru") -> str:
     if lang == "en":
         return (
-            f"\n\n{ce('news_shield')} <b>Important:</b> use the email and password exactly as provided. "
-            "Do not change the email or password, and do not enable 2FA. "
-            "If the account details are changed, the warranty will not apply. "
-            "Use a reliable proxy or a good VPN for stable access. "
-            "If you have any login issue, contact support before making changes."
+            f"\n\n{ce('news_shield')} <b>Recommendations after receiving the account:</b>\n"
+            "• Keep all account details exactly as issued.\n"
+            "• Do not change the email, password, recovery data, or enable 2FA.\n"
+            "• Use a reliable proxy or a good VPN for stable access.\n"
+            "• If you change any account details, the warranty will be void.\n"
+            "• If you have any login issue, contact support before making changes."
         )
 
     return (
-        f"\n\n{ce('news_shield')} <b>Важно:</b> используйте email и пароль строго в том виде, в котором они выданы. "
-        "Не меняйте email, пароль и не включайте 2FA. "
-        "Если данные аккаунта были изменены, гарантия не действует. "
-        "Для стабильного использования используйте хороший прокси или хороший VPN. "
-        "Если возникла проблема со входом, сначала напишите в поддержку и не вносите изменения самостоятельно."
+        f"\n\n{ce('news_shield')} <b>Рекомендации после получения аккаунта:</b>\n"
+        "• Оставьте все данные аккаунта как есть.\n"
+        "• Не меняйте email, пароль, резервные данные и не включайте 2FA.\n"
+        "• Для стабильного входа используйте хороший прокси или хороший VPN.\n"
+        "• Если вы измените любые данные аккаунта, гарантия слетает.\n"
+        "• Если возникла проблема со входом, сначала напишите в поддержку и не вносите изменения самостоятельно."
     )
 
 
