@@ -2322,7 +2322,7 @@ async def add_gpt_accounts_command(message: Message, state: FSMContext) -> None:
         state,
         GPT_ACCOUNT_PRODUCT_CODE,
         "GPT-аккаунтов",
-        "mail1@gmail.com:password",
+        "mail1@hotmail.com:password",
     )
 
 
@@ -2344,7 +2344,7 @@ async def add_grok_accounts_command(message: Message, state: FSMContext) -> None
         state,
         SUPERGROK_PRODUCT_CODE,
         "SUPERGROK-аккаунтов",
-        "mail1@outlook.com:password",
+        "mail1@hotmail.com:password",
     )
 
 
