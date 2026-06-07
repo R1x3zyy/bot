@@ -67,6 +67,7 @@ from db import (
     record_bot_visit,
     set_bot_setting,
     update_user_language,
+    update_purchase_cost,
     update_product_config,
     update_order_status,
 )
@@ -2332,6 +2333,48 @@ async def receive_product_price(message: Message, state: FSMContext) -> None:
     )
 
 
+@router.message(Command("setcost"))
+async def set_purchase_cost_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    parts = (message.text or "").strip().replace(",", ".").split()
+    if len(parts) < 3:
+        await message.answer(
+            "Формат:\n"
+            "<code>/setcost товар закуп_в_$</code>\n\n"
+            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>, <code>grok</code>\n"
+            "Пример: <code>/setcost gpt 2</code>"
+        )
+        return
+
+    product_code = resolve_product_code(parts[1])
+    product = await get_product_config(product_code)
+    if not product:
+        await message.answer("Товар не найден. Используй: link, gpt, gemini12 или grok.")
+        return
+
+    try:
+        cost_usd = Decimal(parts[2]).quantize(Decimal("0.01"))
+    except Exception:
+        await message.answer("Закупочная цена должна быть числом. Пример: <code>/setcost gpt 2</code>")
+        return
+
+    if cost_usd <= 0:
+        await message.answer("Закупочная цена должна быть больше 0.")
+        return
+
+    result = await update_purchase_cost(product_code, cost_usd, update_available=True)
+    await message.answer(
+        f"{ce('ok')} Закупочная цена обновлена.\n\n"
+        f"Товар: <b>{product['title']}</b>\n"
+        f"Новая себестоимость: <b>{result['cost_usd']}$</b>\n"
+        f"Обновлено невыданных позиций: <b>{result['updated_available']}</b>\n\n"
+        "Уже выданные заказы не изменялись, чтобы старая статистика не ломалась."
+    )
+
+
 @router.message(Command("addlinks"))
 async def add_links_command(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id):
@@ -3753,6 +3796,7 @@ async def main() -> None:
                 BotCommand(command="resend", description="Повторно отправить заказ"),
                 BotCommand(command="setreviews", description="Set reviews channel"),
                 BotCommand(command="setprice", description="Поменять цену товара"),
+                BotCommand(command="setcost", description="Поменять закуп товара"),
                 BotCommand(command="addlinks", description="Добавить ссылки"),
                 BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),
                 BotCommand(command="addgeminiaccounts", description="Добавить Gemini аккаунты"),

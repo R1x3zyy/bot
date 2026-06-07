@@ -13,7 +13,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/gemini_store")
 URL_RE = re.compile(r"https?://\S+")
-PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "1.50"))
+PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "2.00"))
 NEW_LINK_COST_USD = Decimal(os.getenv("NEW_LINK_COST_USD", "1.10"))
 REPORT_TZ = os.getenv("REPORT_TZ", "Europe/Moscow")
 ADMIN_ID = os.getenv("ADMIN_ID", "")
@@ -445,12 +445,55 @@ async def channel_leave_stats(days: int = 14, limit: int = 50) -> dict:
     }
 
 
-def purchase_cost_for_product(product_code: str) -> Decimal:
+def default_purchase_cost_for_product(product_code: str) -> Decimal:
     if product_code == GPT_ACCOUNT_PRODUCT_CODE:
-        return Decimal("1.50")
+        return PRODUCT_COST_USD
     if product_code == SUPERGROK_PRODUCT_CODE:
         return Decimal("4.00")
     return NEW_LINK_COST_USD
+
+
+def purchase_cost_for_product(product_code: str, conn=None) -> Decimal:
+    if conn is not None:
+        row = conn.execute(
+            "SELECT value FROM bot_settings WHERE key = %s",
+            (f"purchase_cost_usd:{product_code}",),
+        ).fetchone()
+        if row:
+            try:
+                return Decimal(str(row["value"]))
+            except Exception:
+                pass
+    return default_purchase_cost_for_product(product_code)
+
+
+async def update_purchase_cost(product_code: str, cost_usd: Decimal, update_available: bool = True) -> dict:
+    normalized_cost = Decimal(cost_usd).quantize(Decimal("0.01"))
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO bot_settings (key, value, updated_at)
+            VALUES (%s, %s, now())
+            ON CONFLICT (key) DO UPDATE
+            SET value = EXCLUDED.value,
+                updated_at = now()
+            """,
+            (f"purchase_cost_usd:{product_code}", str(normalized_cost)),
+        )
+        updated_available = 0
+        if update_available:
+            rows = conn.execute(
+                """
+                UPDATE links
+                SET purchase_cost_usd = %s
+                WHERE product_code = %s
+                    AND is_issued = FALSE
+                RETURNING id
+                """,
+                (normalized_cost, product_code),
+            ).fetchall()
+            updated_available = len(rows)
+    return {"product_code": product_code, "cost_usd": normalized_cost, "updated_available": updated_available}
 
 
 async def add_links(links: list[str], product_code: str = DEFAULT_PRODUCT_CODE) -> int:
@@ -468,7 +511,7 @@ async def add_links(links: list[str], product_code: str = DEFAULT_PRODUCT_CODE) 
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            purchase_cost = purchase_cost_for_product(product_code)
+            purchase_cost = purchase_cost_for_product(product_code, conn)
             cur.executemany(
                 "INSERT INTO links (url, product_code, purchase_cost_usd) VALUES (%s, %s, %s)",
                 [(link, product_code, purchase_cost) for link in clean_links],
