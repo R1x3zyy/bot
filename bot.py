@@ -1257,20 +1257,18 @@ def gpt_account_notice(lang: str = "ru") -> str:
     if lang == "en":
         return (
             f"\n\n{ce('news_shield')} <b>Recommendations after receiving the account:</b>\n"
-            "• Keep all account details exactly as issued.\n"
-            "• Do not change the email, password, recovery data, or enable 2FA.\n"
+            "• You may change the password and other account details at your discretion.\n"
+            "• Do not use the account on more than 2 devices. 2 devices is the maximum.\n"
             "• Use a reliable proxy or a good VPN for stable access.\n"
-            "• If you change any account details, the warranty will be void.\n"
-            "• If you have any login issue, contact support before making changes."
+            "• If you have any login issue, contact support first."
         )
 
     return (
         f"\n\n{ce('news_shield')} <b>Рекомендации после получения аккаунта:</b>\n"
-        "• Оставьте все данные аккаунта как есть.\n"
-        "• Не меняйте email, пароль, резервные данные и не включайте 2FA.\n"
+        "• Вы можете менять пароль и другие данные аккаунта на свое усмотрение.\n"
+        "• Не входите в аккаунт больше чем на 2 устройствах, 2 устройства — максимум.\n"
         "• Для стабильного входа используйте хороший прокси или хороший VPN.\n"
-        "• Если вы измените любые данные аккаунта, гарантия слетает.\n"
-        "• Если возникла проблема со входом, сначала напишите в поддержку и не вносите изменения самостоятельно."
+        "• Если возникла проблема со входом, сначала напишите в поддержку."
     )
 
 
