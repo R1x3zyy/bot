@@ -22,6 +22,7 @@ if not ADMIN_ID.isdigit():
 DEFAULT_PRODUCT_CODE = "gemini_link_18_month"
 GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
 SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
+GROK_3D_PRODUCT_CODE = "grok_3d_full_warranty"
 
 
 @contextmanager
@@ -265,6 +266,23 @@ async def ensure_schema() -> None:
                     "- если возникла проблема со входом или аккаунтом, сначала напишите в поддержку и не вносите изменения самостоятельно."
                 ),
             ),
+            (
+                GROK_3D_PRODUCT_CODE,
+                "Grok 3d Full Warranty",
+                Decimal("290.00"),
+                Decimal("4.00"),
+                (
+                    f"{'💰'} Цена: 4.00 USD\n"
+                    f"{'⏳'} Срок действия: 3 дня\n"
+                    f"{'🛡️'} Гарантия: полная гарантия на весь срок\n"
+                    f"{'📦'} Доставка: READY_ACCOUNT\n\n"
+                    "Выдается готовый аккаунт Grok с активной подпиской на 3 дня и полной гарантией.\n\n"
+                    "Данные выдаются в готовом для использования формате:\n"
+                    "почта:пароль от почты:пароль от Grok\n\n"
+                    "После получения используйте данные строго в том виде, в котором они выданы. "
+                    "Если возникла проблема со входом или аккаунтом, сначала напишите в поддержку."
+                ),
+            ),
         ]
         with conn.cursor() as cur:
             cur.executemany(
@@ -450,6 +468,8 @@ def default_purchase_cost_for_product(product_code: str) -> Decimal:
         return PRODUCT_COST_USD
     if product_code == SUPERGROK_PRODUCT_CODE:
         return Decimal("4.00")
+    if product_code == GROK_3D_PRODUCT_CODE:
+        return Decimal("2.00")
     return NEW_LINK_COST_USD
 
 
@@ -1287,6 +1307,7 @@ async def list_product_configs() -> list[dict]:
                     WHEN 'gpt_account_full_warranty' THEN 2
                     WHEN 'gemini_account_12_month' THEN 3
                     WHEN 'supergrok_1_month' THEN 4
+                    WHEN 'grok_3d_full_warranty' THEN 5
                     ELSE 10
                 END,
                 title

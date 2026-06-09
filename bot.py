@@ -91,6 +91,7 @@ PRODUCT_CODE = "gemini_link_18_month"
 GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
 GEMINI_ACCOUNT_PRODUCT_CODE = "gemini_account_12_month"
 SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
+GROK_3D_PRODUCT_CODE = "grok_3d_full_warranty"
 LINK_WHOLESALE_MIN_QUANTITY = 10
 LINK_WHOLESALE_UNIT_USD = Decimal("1.5")
 GPT_WHOLESALE_MIN_QUANTITY = 10
@@ -122,6 +123,10 @@ PRODUCT_ALIASES = {
     "supergrok": SUPERGROK_PRODUCT_CODE,
     "super_grok": SUPERGROK_PRODUCT_CODE,
     "supergrok_account": SUPERGROK_PRODUCT_CODE,
+    "grok3d": GROK_3D_PRODUCT_CODE,
+    "grok_3d": GROK_3D_PRODUCT_CODE,
+    "grok3": GROK_3D_PRODUCT_CODE,
+    "grok_3d_full": GROK_3D_PRODUCT_CODE,
 }
 CE = {
     "gemini": ("5321197740800120767", "🤖"),
@@ -1893,7 +1898,7 @@ async def give_item_command(message: Message, bot: Bot) -> None:
             "Формат:\n"
             "<code>/giveitem user_id товар количество</code>\n"
             "<code>/giveitem @username товар количество</code>\n\n"
-            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>\n"
+            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>, <code>grok</code>, <code>grok3d</code>\n"
             "Пример: <code>/giveitem @username link 1</code>"
         )
         return
@@ -1933,7 +1938,7 @@ async def give_item_command(message: Message, bot: Bot) -> None:
     product_code = resolve_product_code(parts[2])
     product = await get_product_config(product_code)
     if not product:
-        await message.answer("Товар не найден. Используй: link, gpt или gemini12.")
+        await message.answer("Товар не найден. Используй: link, gpt, gemini12, grok или grok3d.")
         return
 
     stock = await count_available_links(product_code)
@@ -2074,7 +2079,7 @@ async def take_item_command(message: Message) -> None:
         await message.answer(
             "Формат:\n"
             "<code>/takeitem товар количество</code>\n\n"
-            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>\n"
+            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>, <code>grok</code>, <code>grok3d</code>\n"
             "Пример: <code>/takeitem link 1</code>"
         )
         return
@@ -2094,7 +2099,7 @@ async def take_item_command(message: Message) -> None:
 
     product = await get_product_config(product_code)
     if not product:
-        await message.answer("Товар не найден. Используй: link, gpt или gemini12.")
+        await message.answer("Товар не найден. Используй: link, gpt, gemini12, grok или grok3d.")
         return
 
     stock = await count_available_links(product_code)
@@ -2344,7 +2349,7 @@ async def set_purchase_cost_command(message: Message) -> None:
         await message.answer(
             "Формат:\n"
             "<code>/setcost товар закуп_в_$</code>\n\n"
-            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>, <code>grok</code>\n"
+            "Товары: <code>link</code>, <code>gpt</code>, <code>gemini12</code>, <code>grok</code>, <code>grok3d</code>\n"
             "Пример: <code>/setcost gpt 2</code>"
         )
         return
@@ -2352,7 +2357,7 @@ async def set_purchase_cost_command(message: Message) -> None:
     product_code = resolve_product_code(parts[1])
     product = await get_product_config(product_code)
     if not product:
-        await message.answer("Товар не найден. Используй: link, gpt, gemini12 или grok.")
+        await message.answer("Товар не найден. Используй: link, gpt, gemini12, grok или grok3d.")
         return
 
     try:
@@ -2469,6 +2474,17 @@ async def add_grok_accounts_command(message: Message, state: FSMContext) -> None
         SUPERGROK_PRODUCT_CODE,
         "SUPERGROK-аккаунтов",
         "mail1@hotmail.com:password",
+    )
+
+
+@router.message(Command("addgrok3daccounts"))
+async def add_grok_3d_accounts_command(message: Message, state: FSMContext) -> None:
+    await add_accounts_command(
+        message,
+        state,
+        GROK_3D_PRODUCT_CODE,
+        "Grok 3d-аккаунтов",
+        "mail1@hotmail.com:mail_password:grok_password",
     )
 
 
@@ -3801,6 +3817,7 @@ async def main() -> None:
                 BotCommand(command="addgptaccounts", description="Добавить GPT аккаунты"),
                 BotCommand(command="addgeminiaccounts", description="Добавить Gemini аккаунты"),
                 BotCommand(command="addgrokaccounts", description="Добавить SUPERGROK аккаунты"),
+                BotCommand(command="addgrok3daccounts", description="Добавить Grok 3d аккаунты"),
                 BotCommand(command="broadcast", description="Рассылка"),
             ],
             scope=BotCommandScopeChat(chat_id=int(ADMIN_ID)),
