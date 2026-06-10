@@ -2068,6 +2068,100 @@ async def add_balance_command(message: Message, bot: Bot) -> None:
         logging.exception("Could not notify user %s about admin balance top-up", target_user_id)
 
 
+@router.message(Command("removebalance"))
+async def remove_balance_command(message: Message, bot: Bot) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    parts = (message.text or "").split(maxsplit=3)
+    if len(parts) < 3:
+        await message.answer(
+            "Формат:\n"
+            "<code>/removebalance user_id сумма</code>\n"
+            "<code>/removebalance @username сумма</code>\n\n"
+            "Примеры:\n"
+            "<code>/removebalance @username 500</code>\n"
+            "<code>/removebalance 123456789 500</code>"
+        )
+        return
+
+    target = parts[1].strip()
+    try:
+        amount_rub = int(parts[2])
+    except ValueError:
+        await message.answer("Сумма должна быть числом в рублях.")
+        return
+
+    if amount_rub <= 0:
+        await message.answer("Сумма должна быть больше 0.")
+        return
+
+    target_label = target
+    if target.startswith("@"):
+        target_user = await get_user_by_username(target)
+        if not target_user:
+            await message.answer(
+                "Пользователь не найден в базе бота.\n\n"
+                "Он должен хотя бы один раз написать /start боту, после этого можно списывать баланс по @username."
+            )
+            return
+        target_user_id = int(target_user["id"])
+        target_label = f"@{target_user['username']}" if target_user["username"] else str(target_user_id)
+    else:
+        try:
+            target_user_id = int(target)
+        except ValueError:
+            await message.answer("Укажите пользователя как ID или @username.")
+            return
+        target_user = await get_user(target_user_id)
+        if not target_user:
+            await message.answer(
+                "Пользователь не найден в базе бота.\n\n"
+                "Он должен хотя бы один раз написать /start боту."
+            )
+            return
+        if target_user["username"]:
+            target_label = f"@{target_user['username']}"
+
+    current_balance = int(target_user["balance"])
+    if amount_rub > current_balance:
+        await message.answer(
+            f"Нельзя списать больше текущего баланса.\n\n"
+            f"Пользователь: <code>{html.escape(str(target_label))}</code>\n"
+            f"Баланс сейчас: <b>{current_balance} ₽</b>\n"
+            f"Вы пытаетесь списать: <b>{amount_rub} ₽</b>"
+        )
+        return
+
+    note = parts[3].strip() if len(parts) >= 4 else ""
+    description = f"Admin balance withdrawal by {message.from_user.id}"
+    if note:
+        description = f"{description}: {note[:200]}"
+
+    await add_user_balance(target_user_id, -amount_rub, description)
+    updated_user = await get_user(target_user_id)
+    new_balance = int(updated_user["balance"]) if updated_user else 0
+
+    await message.answer(
+        f"{ce('ok')} Баланс списан.\n\n"
+        f"Пользователь: <code>{html.escape(str(target_label))}</code>\n"
+        f"Сумма: <b>{amount_rub} ₽</b>\n"
+        f"Новый баланс: <b>{new_balance} ₽</b>"
+    )
+
+    try:
+        await safe_bot_send_message(
+            bot,
+            target_user_id,
+            f"{ce('news_money')} <b>Баланс изменен</b>\n\n"
+            f"Списано: <b>{amount_rub} ₽</b>\n"
+            f"Ваш баланс: <b>{new_balance} ₽</b>",
+        )
+    except Exception:
+        logging.exception("Could not notify user %s about admin balance withdrawal", target_user_id)
+
+
 @router.message(Command("takeitem"))
 async def take_item_command(message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -3807,6 +3901,7 @@ async def main() -> None:
                 BotCommand(command="daystats", description="Статистика за день"),
                 BotCommand(command="giveitem", description="Выдать товар пользователю"),
                 BotCommand(command="addbalance", description="Пополнить баланс пользователю"),
+                BotCommand(command="removebalance", description="Списать баланс у пользователя"),
                 BotCommand(command="takeitem", description="Забрать товар себе"),
                 BotCommand(command="resendorder", description="Повторно отправить заказ"),
                 BotCommand(command="resend", description="Повторно отправить заказ"),
