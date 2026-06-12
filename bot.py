@@ -151,7 +151,7 @@ CE = {
     "fire": ("5454182246250474905", "🔥"),
     "bolt": ("5458746443571421160", "⚡️"),
     "ok": ("5273806972871787310", "✅"),
-    "cross": ("5273811357938440630", "❌"),
+    "cross": (None, "❌"),
     "globe": ("5447410659077661506", "🌐"),
     "chart": ("5244837092042750681", "📈"),
     "spark": ("5325547803936572038", "✨"),
@@ -173,6 +173,8 @@ CE = {
 
 def ce(name: str) -> str:
     emoji_id, fallback = CE[name]
+    if not emoji_id:
+        return fallback
     return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
 
