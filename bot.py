@@ -165,7 +165,7 @@ CE = {
     "news_gear": ("5341715473882955310", "⚙️"),
     "news_pencil": ("5395444784611480792", "✏️"),
     "news_info": ("5334544901428229844", "ℹ️"),
-    "grok": ("5325547803936572038", "✦"),
+    "grok": ("5319288443153445517", "✦"),
     "gpt": ("5310259124817134249", "🤖"),
     "claude": ("5321196473784773037", "✳️"),
 }
@@ -211,7 +211,7 @@ def product_icon(product_code: str) -> str:
     if "claude" in product_code:
         return ce("claude")
     if "grok" in product_code:
-        return "✦"
+        return ce("grok")
     if "gpt" in product_code:
         return ce("gpt")
     return ce("gemini")
