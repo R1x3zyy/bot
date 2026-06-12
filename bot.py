@@ -1839,7 +1839,7 @@ async def show_payment_methods_for_quantity(message: Message, state: FSMContext,
 async def start(message: Message) -> None:
     user = await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     lang = user["language"] if user["language"] in {"ru", "en"} else "ru"
-    await answer_with_banner(
+    await safe_answer(
         message,
         await home_text(lang, display_user_name(message.from_user)),
         reply_markup=start_keyboard(lang),
@@ -1891,7 +1891,7 @@ async def check_subscription(callback: CallbackQuery, bot: Bot) -> None:
 
     text = f"{ce('ok')} Subscription confirmed." if lang == "en" else f"{ce('ok')} Подписка подтверждена."
     await callback.message.answer(text)
-    await answer_with_banner(
+    await safe_answer(
         callback.message,
         await home_text(lang, display_user_name(callback.from_user)),
         reply_markup=start_keyboard(lang),
