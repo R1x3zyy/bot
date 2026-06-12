@@ -1143,7 +1143,7 @@ async def daily_business_stats() -> dict:
                 ON (orders.created_at AT TIME ZONE %s)::date = today.day
                 AND orders.status <> 'Отменен'
                 AND orders.price_rub > 0
-                AND orders.contact NOT LIKE 'manual:%'
+                AND orders.contact NOT LIKE 'manual:%%'
                 AND (%s = '' OR orders.user_id IS DISTINCT FROM %s::bigint)
             GROUP BY today.day
             """,
@@ -1161,7 +1161,7 @@ async def daily_business_stats() -> dict:
             WHERE (orders.created_at AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
                 AND orders.status <> 'Отменен'
                 AND orders.price_rub > 0
-                AND orders.contact NOT LIKE 'manual:%'
+                AND orders.contact NOT LIKE 'manual:%%'
                 AND (%s = '' OR orders.user_id IS DISTINCT FROM %s::bigint)
             """,
             (REPORT_TZ, REPORT_TZ, ADMIN_ID, ADMIN_ID or "0"),
@@ -1175,7 +1175,7 @@ async def daily_business_stats() -> dict:
             LEFT JOIN orders ON orders.id = links.order_id
             WHERE is_issued = TRUE
                 AND issued_at IS NOT NULL
-                AND COALESCE(orders.contact, '') NOT LIKE 'manual:%'
+                AND COALESCE(orders.contact, '') NOT LIKE 'manual:%%'
                 AND (%s = '' OR issued_to IS DISTINCT FROM %s::bigint)
                 AND (COALESCE(orders.created_at, issued_at) AT TIME ZONE %s)::date = (now() AT TIME ZONE %s)::date
             """,
@@ -1236,7 +1236,7 @@ async def business_stats_by_days(days: int = 30) -> list[dict]:
             WHERE (orders.created_at AT TIME ZONE %s)::date >= (now() AT TIME ZONE %s)::date - (%s::int - 1)
                 AND orders.status <> 'Отменен'
                 AND orders.price_rub > 0
-                AND orders.contact NOT LIKE 'manual:%'
+                AND orders.contact NOT LIKE 'manual:%%'
                 AND (%s = '' OR orders.user_id IS DISTINCT FROM %s::bigint)
             """,
             (REPORT_TZ, REPORT_TZ, REPORT_TZ, safe_days, ADMIN_ID, ADMIN_ID or "0"),
@@ -1251,7 +1251,7 @@ async def business_stats_by_days(days: int = 30) -> list[dict]:
             LEFT JOIN orders ON orders.id = links.order_id
             WHERE is_issued = TRUE
                 AND issued_at IS NOT NULL
-                AND COALESCE(orders.contact, '') NOT LIKE 'manual:%'
+                AND COALESCE(orders.contact, '') NOT LIKE 'manual:%%'
                 AND (COALESCE(orders.created_at, links.issued_at) AT TIME ZONE %s)::date >= (now() AT TIME ZONE %s)::date - (%s::int - 1)
                 AND (%s = '' OR issued_to IS DISTINCT FROM %s::bigint)
             GROUP BY day
