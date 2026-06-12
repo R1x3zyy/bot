@@ -173,9 +173,7 @@ CE = {
 
 def ce(name: str) -> str:
     emoji_id, fallback = CE[name]
-    if not emoji_id:
-        return fallback
-    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+    return fallback
 
 
 def plain_custom_emoji(text: str) -> str:
