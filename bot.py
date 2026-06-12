@@ -995,11 +995,11 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
         return (
             f"{ce('spark')} <b>Welcome to the store{greeting_name}!</b>\n\n"
             f"{ce('gemini')} <b>Products:</b>\n"
-            "<blockquote>\n"
+            "<blockquote>"
             + "\n".join(product_lines) +
             "\n</blockquote>\n\n"
             f"{ce('fire')} <b>Benefits:</b>\n"
-            "<blockquote>\n"
+            "<blockquote>"
             f"{ce('news_bolt')} Fast delivery\n"
             f"{ce('news_money')} Easy payment\n"
             f"{ce('ok')} Warranty\n"
@@ -1011,11 +1011,11 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
     return (
         f"{ce('spark')} <b>Добро пожаловать в магазин{greeting_name}!</b>\n\n"
         f"{ce('shop')} <b>Товары:</b>\n"
-        "<blockquote>\n"
+        "<blockquote>"
         + "\n".join(product_lines) +
         "\n</blockquote>\n\n"
         f"{ce('fire')} <b>Плюсы:</b>\n"
-        "<blockquote>\n"
+        "<blockquote>"
         f"{ce('news_bolt')} Быстрая выдача\n"
         f"{ce('news_money')} Удобная оплата\n"
         f"{ce('ok')} Гарантия\n"
