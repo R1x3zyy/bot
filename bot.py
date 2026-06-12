@@ -288,9 +288,11 @@ async def answer_with_banner(
                 )
                 return
             if "ENTITY_TEXT_INVALID" in error_text:
-                logging.warning("Telegram rejected custom emoji in photo caption; sending banner and text separately.")
-                await message.answer_photo(FSInputFile(PROFILE_BANNER_PATH))
-                await safe_answer(message, text, reply_markup=reply_markup)
+                await message.answer_photo(
+                    FSInputFile(PROFILE_BANNER_PATH),
+                    caption=plain_custom_emoji(text),
+                    reply_markup=reply_markup,
+                )
                 return
             if "DOCUMENT_INVALID" not in error_text:
                 raise
