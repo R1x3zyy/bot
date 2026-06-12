@@ -283,9 +283,8 @@ async def answer_with_banner(
             if "ENTITY_TEXT_INVALID" in error_text:
                 await message.answer_photo(
                     FSInputFile(PROFILE_BANNER_PATH),
-                    caption=plain_telegram_text(text),
+                    caption=plain_custom_emoji(text),
                     reply_markup=reply_markup,
-                    parse_mode=None,
                 )
                 return
             if "DOCUMENT_INVALID" not in error_text:
