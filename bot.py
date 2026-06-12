@@ -103,6 +103,7 @@ WHOLESALE_TIERS = {
     GPT_ACCOUNT_PRODUCT_CODE: [(GPT_WHOLESALE_MIN_QUANTITY, GPT_WHOLESALE_UNIT_USD)],
     SUPERGROK_PRODUCT_CODE: [(GROK_WHOLESALE_MIN_QUANTITY, GROK_WHOLESALE_UNIT_USD)],
 }
+HIDDEN_CATALOG_PRODUCT_CODES = {GEMINI_ACCOUNT_PRODUCT_CODE, GROK_3D_PRODUCT_CODE}
 SUPPORT_USERNAME = "@AutoGeminiSupport"
 SUPPORT_URL = "https://t.me/AutoGeminiSupport"
 TELEGRAM_USERNAME_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
@@ -198,7 +199,7 @@ def product_icon(product_code: str) -> str:
     if "grok" in product_code:
         return "✦"
     if "gpt" in product_code:
-        return ce("shop")
+        return "🤖"
     return ce("gemini")
 
 
@@ -206,7 +207,7 @@ def product_button_icon(product_code: str) -> str:
     if "grok" in product_code:
         return "✦"
     if "gpt" in product_code:
-        return "🛍"
+        return "🤖"
     return "💠"
 
 
@@ -214,6 +215,11 @@ def resolve_product_code(value: str) -> str:
     normalized = value.strip().lower().replace("-", "_")
     normalized = normalized.replace(" ", "_")
     return PRODUCT_ALIASES.get(normalized, normalized)
+
+
+async def visible_catalog_products() -> list[dict]:
+    products = await list_product_configs()
+    return [product for product in products if product["code"] not in HIDDEN_CATALOG_PRODUCT_CODES]
 
 
 async def get_reviews_channel_id() -> str:
@@ -676,7 +682,7 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     back = "⬅️ Back" if lang == "en" else "⬅️ Назад"
     item_suffix = "pcs" if lang == "en" else "шт."
-    products = await list_product_configs()
+    products = await visible_catalog_products()
     rows = []
     for product in products:
         stock = await count_available_links(product["code"])
@@ -926,7 +932,7 @@ def language_keyboard() -> InlineKeyboardMarkup:
 
 
 async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
-    products = await list_product_configs()
+    products = await visible_catalog_products()
     product_lines = []
     total_stock = 0
     item_suffix = "pcs" if lang == "en" else "шт."
