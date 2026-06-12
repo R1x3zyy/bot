@@ -1,7 +1,9 @@
 import os
 import re
+import hashlib
+import secrets
 from contextlib import contextmanager
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 import psycopg
 from dotenv import load_dotenv
@@ -25,6 +27,18 @@ SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
 GROK_3D_PRODUCT_CODE = "grok_3d_full_warranty"
 CLAUDE_MAX_X5_PRODUCT_CODE = "claude_max_x5_cdk"
 CLAUDE_MAX_X20_PRODUCT_CODE = "claude_max_x20_cdk"
+LINK_WHOLESALE_MIN_QUANTITY = 10
+LINK_WHOLESALE_UNIT_USD = Decimal("1.50")
+GPT_WHOLESALE_MIN_QUANTITY = 10
+GPT_WHOLESALE_UNIT_USD = Decimal("3.50")
+GROK_WHOLESALE_MIN_QUANTITY = 5
+GROK_WHOLESALE_UNIT_USD = Decimal("5.50")
+WHOLESALE_TIERS = {
+    DEFAULT_PRODUCT_CODE: [(LINK_WHOLESALE_MIN_QUANTITY, LINK_WHOLESALE_UNIT_USD)],
+    GPT_ACCOUNT_PRODUCT_CODE: [(GPT_WHOLESALE_MIN_QUANTITY, GPT_WHOLESALE_UNIT_USD)],
+    SUPERGROK_PRODUCT_CODE: [(GROK_WHOLESALE_MIN_QUANTITY, GROK_WHOLESALE_UNIT_USD)],
+}
+SUPPORT_ONLY_PRODUCT_CODES = {CLAUDE_MAX_X5_PRODUCT_CODE, CLAUDE_MAX_X20_PRODUCT_CODE}
 
 
 @contextmanager
@@ -47,6 +61,31 @@ def snapshot_sale_usd(conn, product_code: str, price_rub: int | Decimal, fallbac
     if product_rub <= 0:
         return Decimal("0")
     return (Decimal(price_rub or 0) / product_rub) * product_usd
+
+
+def hash_api_key(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+def calculate_api_order_price(product: dict, quantity: int) -> dict[str, Decimal | int]:
+    base_rub = Decimal(product["price_rub"] or 0)
+    base_usd = Decimal(product["price_usd"] or 0)
+    unit_usd = base_usd
+    for min_quantity, tier_unit_usd in sorted(WHOLESALE_TIERS.get(str(product["code"]), []), key=lambda tier: tier[0]):
+        if quantity >= min_quantity:
+            unit_usd = tier_unit_usd
+
+    if base_usd > 0:
+        unit_rub = (base_rub / base_usd * unit_usd).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    else:
+        unit_rub = base_rub.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    return {
+        "unit_rub": int(unit_rub),
+        "unit_usd": unit_usd,
+        "total_rub": int(unit_rub) * quantity,
+        "total_usd": unit_usd * quantity,
+    }
 
 
 async def ensure_schema() -> None:
@@ -155,6 +194,17 @@ async def ensure_schema() -> None:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT '',
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+
+            CREATE TABLE IF NOT EXISTS reseller_api_keys (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                key_hash TEXT NOT NULL UNIQUE,
+                key_prefix TEXT NOT NULL DEFAULT '',
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                last_used_at TIMESTAMPTZ
             );
 
             CREATE TABLE IF NOT EXISTS platega_payments (
@@ -371,6 +421,46 @@ async def get_user_by_username(username: str) -> dict | None:
             "SELECT * FROM users WHERE lower(username) = %s ORDER BY created_at DESC LIMIT 1",
             (normalized,),
         ).fetchone()
+
+
+async def create_reseller_api_key(user_id: int, name: str = "") -> dict:
+    raw_key = f"r1x_{secrets.token_urlsafe(32)}"
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO reseller_api_keys (user_id, name, key_hash, key_prefix)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, user_id, name, key_prefix, is_active, created_at
+            """,
+            (user_id, name[:100], hash_api_key(raw_key), raw_key[:12]),
+        ).fetchone()
+    return {**row, "api_key": raw_key}
+
+
+async def get_reseller_api_client(api_key: str) -> dict | None:
+    if not api_key:
+        return None
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                reseller_api_keys.id AS key_id,
+                reseller_api_keys.user_id,
+                reseller_api_keys.name,
+                reseller_api_keys.key_prefix,
+                users.username,
+                users.first_name,
+                users.balance
+            FROM reseller_api_keys
+            JOIN users ON users.id = reseller_api_keys.user_id
+            WHERE reseller_api_keys.key_hash = %s
+                AND reseller_api_keys.is_active = TRUE
+            """,
+            (hash_api_key(api_key),),
+        ).fetchone()
+        if row:
+            conn.execute("UPDATE reseller_api_keys SET last_used_at = now() WHERE id = %s", (row["key_id"],))
+        return row
 
 
 async def update_user_language(user_id: int, language: str) -> dict | None:
@@ -775,6 +865,123 @@ async def create_balance_order(
             (user_id, "purchase", -price_rub, f"Balance payment: {product_title}"),
         )
         return order
+
+
+async def create_reseller_api_order(
+    user_id: int,
+    key_id: int,
+    product_code: str,
+    quantity: int,
+    request_id: str = "",
+) -> dict:
+    safe_quantity = max(1, min(int(quantity), 100))
+    safe_request_id = request_id[:100]
+    with get_conn() as conn:
+        product = conn.execute("SELECT * FROM product_settings WHERE code = %s", (product_code,)).fetchone()
+        if not product:
+            return {"ok": False, "error": "unknown_product"}
+        if product_code in SUPPORT_ONLY_PRODUCT_CODES:
+            return {"ok": False, "error": "support_only"}
+
+        links = conn.execute(
+            """
+            SELECT id, url, product_code
+            FROM links
+            WHERE is_issued = FALSE
+                AND product_code = %s
+            ORDER BY id
+            LIMIT %s
+            FOR UPDATE SKIP LOCKED
+            """,
+            (product_code, safe_quantity),
+        ).fetchall()
+        if len(links) < safe_quantity:
+            return {
+                "ok": False,
+                "error": "not_enough_stock",
+                "available": len(links),
+                "requested": safe_quantity,
+            }
+
+        pricing = calculate_api_order_price(product, safe_quantity)
+        total_rub = int(pricing["total_rub"])
+        total_usd = Decimal(pricing["total_usd"])
+        charged_user = conn.execute(
+            """
+            UPDATE users
+            SET balance = balance - %s
+            WHERE id = %s AND balance >= %s
+            RETURNING balance, username
+            """,
+            (total_rub, user_id, total_rub),
+        ).fetchone()
+        if not charged_user:
+            current_user = conn.execute("SELECT balance FROM users WHERE id = %s", (user_id,)).fetchone()
+            return {
+                "ok": False,
+                "error": "insufficient_balance",
+                "balance": int(current_user["balance"]) if current_user else 0,
+                "required": total_rub,
+            }
+
+        order_title = product["title"] if safe_quantity == 1 else f"{product['title']} ×{safe_quantity}"
+        contact = f"reseller_api:{key_id}" + (f":{safe_request_id}" if safe_request_id else "")
+        order = conn.execute(
+            """
+            INSERT INTO orders (user_id, username, product_code, product_title, price_rub, sale_usd, contact, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                user_id,
+                f"@{charged_user['username']}" if charged_user["username"] else "reseller_api",
+                product_code,
+                order_title,
+                total_rub,
+                total_usd,
+                contact,
+                "Выдан автоматически",
+            ),
+        ).fetchone()
+        link_ids = [link["id"] for link in links]
+        conn.execute(
+            """
+            UPDATE links
+            SET is_issued = TRUE,
+                issued_to = %s,
+                order_id = %s,
+                issued_at = now()
+            WHERE id = ANY(%s::bigint[])
+            """,
+            (user_id, order["id"], link_ids),
+        )
+        conn.execute(
+            """
+            UPDATE orders
+            SET issued_link_id = %s
+            WHERE id = %s
+            """,
+            (link_ids[0], order["id"]),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions (user_id, type, amount, description)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (user_id, "purchase", -total_rub, f"Reseller API: {order_title}"),
+        )
+
+        return {
+            "ok": True,
+            "order": order,
+            "items": links,
+            "quantity": safe_quantity,
+            "unit_rub": pricing["unit_rub"],
+            "unit_usd": pricing["unit_usd"],
+            "total_rub": total_rub,
+            "total_usd": total_usd,
+            "balance": charged_user["balance"],
+        }
 
 
 async def create_crypto_payment(

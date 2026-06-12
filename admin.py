@@ -30,9 +30,12 @@ from db import (
     get_crypto_payment_by_invoice,
     get_platega_payment_by_transaction,
     get_product_config,
+    get_reseller_api_client,
     list_product_configs,
     list_links,
     list_users,
+    count_available_links,
+    create_reseller_api_order,
     recent_orders,
     update_platega_payment_status,
     update_order_status,
@@ -79,6 +82,30 @@ class OrderStatusPayload(BaseModel):
     status: str
 
 
+class ResellerOrderPayload(BaseModel):
+    product_code: str
+    quantity: int = 1
+    request_id: str = ""
+
+
+PRODUCT_ALIASES = {
+    "link": "gemini_link_18_month",
+    "links": "gemini_link_18_month",
+    "gpt": "gpt_account_full_warranty",
+    "chatgpt": "gpt_account_full_warranty",
+    "grok": "supergrok_1_month",
+    "supergrok": "supergrok_1_month",
+    "grok3d": "grok_3d_full_warranty",
+    "gemini12": "gemini_account_12_month",
+}
+SUPPORT_ONLY_PRODUCT_CODES = {"claude_max_x5_cdk", "claude_max_x20_cdk"}
+
+
+def resolve_product_code(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    return PRODUCT_ALIASES.get(normalized, normalized)
+
+
 def check_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
     if credentials.username != ADMIN_LOGIN or credentials.password != ADMIN_PASSWORD:
         raise HTTPException(
@@ -87,6 +114,13 @@ def check_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials.username
+
+
+async def check_reseller_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> dict:
+    client = await get_reseller_api_client(x_api_key or "")
+    if not client:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+    return client
 
 
 def check_platega_headers(merchant_id: str | None, secret: str | None) -> None:
@@ -302,6 +336,63 @@ async def product(code: str = "gemini_link_18_month", _: str = Depends(check_aut
 @app.get("/api/products")
 async def products(_: str = Depends(check_auth)) -> list[dict]:
     return [clean_row(product) for product in await list_product_configs()]
+
+
+@app.get("/api/reseller/products")
+async def reseller_products(client: dict = Depends(check_reseller_api_key)) -> dict:
+    products_rows = []
+    for product in await list_product_configs():
+        if product["code"] in SUPPORT_ONLY_PRODUCT_CODES:
+            continue
+        products_rows.append(
+            {
+                **clean_row(product),
+                "stock": await count_available_links(product["code"]),
+            }
+        )
+    return {
+        "ok": True,
+        "user_id": client["user_id"],
+        "balance": clean_value(client["balance"]),
+        "products": products_rows,
+    }
+
+
+@app.post("/api/reseller/order")
+async def reseller_order(payload: ResellerOrderPayload, client: dict = Depends(check_reseller_api_key)) -> dict:
+    quantity = max(1, min(int(payload.quantity or 1), 100))
+    product_code = resolve_product_code(payload.product_code)
+    result = await create_reseller_api_order(
+        user_id=int(client["user_id"]),
+        key_id=int(client["key_id"]),
+        product_code=product_code,
+        quantity=quantity,
+        request_id=payload.request_id.strip(),
+    )
+    if not result.get("ok"):
+        error = result.get("error", "unknown_error")
+        status_code = 400
+        if error == "insufficient_balance":
+            status_code = 402
+        elif error in {"unknown_product", "not_enough_stock"}:
+            status_code = 409
+        raise HTTPException(status_code=status_code, detail=result)
+
+    order = clean_row(result["order"])
+    items = [{"id": item["id"], "product_code": item["product_code"], "value": item["url"]} for item in result["items"]]
+    return {
+        "ok": True,
+        "order_id": order["id"],
+        "product_code": order["product_code"],
+        "product_title": order["product_title"],
+        "quantity": result["quantity"],
+        "unit_rub": result["unit_rub"],
+        "unit_usd": clean_value(result["unit_usd"]),
+        "total_rub": result["total_rub"],
+        "total_usd": clean_value(result["total_usd"]),
+        "balance": clean_value(result["balance"]),
+        "items": items,
+    }
 
 
 @app.put("/api/product")

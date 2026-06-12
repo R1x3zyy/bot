@@ -39,6 +39,7 @@ from db import (
     complete_platega_payment,
     complete_crypto_payment,
     count_available_links,
+    create_reseller_api_key,
     create_order,
     create_balance_order,
     create_crypto_payment,
@@ -2214,6 +2215,48 @@ async def remove_balance_command(message: Message, bot: Bot) -> None:
         logging.exception("Could not notify user %s about admin balance withdrawal", target_user_id)
 
 
+@router.message(Command("createapikey"))
+async def create_api_key_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Эта команда доступна только администратору.")
+        return
+
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 2:
+        await message.answer(
+            "Формат:\n"
+            "<code>/createapikey user_id</code>\n"
+            "<code>/createapikey @username</code>\n\n"
+            "Пользователь должен хотя бы один раз написать /start боту."
+        )
+        return
+
+    target = parts[1].strip()
+    if target.startswith("@"):
+        target_user = await get_user_by_username(target)
+        if not target_user:
+            await message.answer("Пользователь не найден. Он должен хотя бы один раз написать /start боту.")
+            return
+    else:
+        try:
+            target_user = await get_user(int(target))
+        except ValueError:
+            await message.answer("Укажите пользователя как ID или @username.")
+            return
+        if not target_user:
+            await message.answer("Пользователь не найден. Он должен хотя бы один раз написать /start боту.")
+            return
+
+    label = f"@{target_user['username']}" if target_user["username"] else str(target_user["id"])
+    key = await create_reseller_api_key(int(target_user["id"]), f"telegram:{label}")
+    await message.answer(
+        f"{ce('ok')} API-ключ создан для <code>{html.escape(label)}</code>.\n\n"
+        "Покажите ключ покупателю только один раз:\n"
+        f"<code>{html.escape(key['api_key'])}</code>\n\n"
+        "Этим ключом его бот сможет покупать товары с баланса этого пользователя через reseller API."
+    )
+
+
 @router.message(Command("takeitem"))
 async def take_item_command(message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -3963,6 +4006,7 @@ async def main() -> None:
                 BotCommand(command="giveitem", description="Выдать товар пользователю"),
                 BotCommand(command="addbalance", description="Пополнить баланс пользователю"),
                 BotCommand(command="removebalance", description="Списать баланс у пользователя"),
+                BotCommand(command="createapikey", description="Создать API-ключ покупателю"),
                 BotCommand(command="takeitem", description="Забрать товар себе"),
                 BotCommand(command="resendorder", description="Повторно отправить заказ"),
                 BotCommand(command="resend", description="Повторно отправить заказ"),
