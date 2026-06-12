@@ -1832,7 +1832,7 @@ async def show_payment_methods_for_quantity(message: Message, state: FSMContext,
         f"Цена за 1 шт.: <b>{pricing['unit_rub']} ₽ / {format_usd(pricing['unit_usd'])}$</b>\n"
         f"Сумма: <b>{total} ₽</b>"
     )
-    await message.answer(text, reply_markup=bulk_payment_keyboard(quantity, lang))
+    await safe_answer(message, text, reply_markup=bulk_payment_keyboard(quantity, lang))
 
 
 @router.message(CommandStart())
@@ -3386,12 +3386,12 @@ async def start_bulk_order(callback: CallbackQuery, state: FSMContext) -> None:
             if lang == "en"
             else f"{ce('support')} Этот товар оформляется через поддержку: {SUPPORT_USERNAME}"
         )
-        await callback.message.answer(text, reply_markup=product_keyboard(lang, product_code))
+        await safe_answer(callback.message, text, reply_markup=product_keyboard(lang, product_code))
         await callback.answer()
         return
     await state.clear()
     await state.update_data(bulk_product_code=product_code)
-    await callback.message.answer(await quantity_text(lang, product_code), reply_markup=quantity_keyboard(lang, product_code))
+    await safe_answer(callback.message, await quantity_text(lang, product_code), reply_markup=quantity_keyboard(lang, product_code))
     await callback.answer()
 
 
@@ -3414,7 +3414,7 @@ async def ask_custom_quantity(callback: CallbackQuery, state: FSMContext) -> Non
         if lang == "en"
         else f"{product_icon(product_code)} Отправьте числом, сколько штук хотите купить."
     )
-    await callback.message.answer(text)
+    await safe_answer(callback.message, text)
     await callback.answer()
 
 
