@@ -23,6 +23,8 @@ DEFAULT_PRODUCT_CODE = "gemini_link_18_month"
 GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
 SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
 GROK_3D_PRODUCT_CODE = "grok_3d_full_warranty"
+CLAUDE_MAX_X5_PRODUCT_CODE = "claude_max_x5_cdk"
+CLAUDE_MAX_X20_PRODUCT_CODE = "claude_max_x20_cdk"
 
 
 @contextmanager
@@ -281,6 +283,34 @@ async def ensure_schema() -> None:
                     "почта:пароль от почты:пароль от Grok\n\n"
                     "После получения используйте данные строго в том виде, в котором они выданы. "
                     "Если возникла проблема со входом или аккаунтом, сначала напишите в поддержку."
+                ),
+            ),
+            (
+                CLAUDE_MAX_X5_PRODUCT_CODE,
+                "Claude Max x5 CDK",
+                Decimal("6000.00"),
+                Decimal("80.00"),
+                (
+                    f"{'💰'} Цена: 80.00 USD\n"
+                    f"{'📦'} Формат: CDK\n"
+                    f"{'🛡️'} Оформление: на ваш аккаунт\n\n"
+                    "Claude Max x5 CDK — это не готовый аккаунт. CDK оформляется на ваш личный аккаунт.\n\n"
+                    "Для заказа напишите в личные сообщения поддержки. "
+                    "Менеджер уточнит данные и поможет оформить активацию."
+                ),
+            ),
+            (
+                CLAUDE_MAX_X20_PRODUCT_CODE,
+                "Claude Max x20 CDK",
+                Decimal("9000.00"),
+                Decimal("120.00"),
+                (
+                    f"{'💰'} Цена: 120.00 USD\n"
+                    f"{'📦'} Формат: CDK\n"
+                    f"{'🛡️'} Оформление: на ваш аккаунт\n\n"
+                    "Claude Max x20 CDK — это не готовый аккаунт. CDK оформляется на ваш личный аккаунт.\n\n"
+                    "Для заказа напишите в личные сообщения поддержки. "
+                    "Менеджер уточнит данные и поможет оформить активацию."
                 ),
             ),
         ]
@@ -1308,6 +1338,8 @@ async def list_product_configs() -> list[dict]:
                     WHEN 'gemini_account_12_month' THEN 3
                     WHEN 'supergrok_1_month' THEN 4
                     WHEN 'grok_3d_full_warranty' THEN 5
+                    WHEN 'claude_max_x5_cdk' THEN 6
+                    WHEN 'claude_max_x20_cdk' THEN 7
                     ELSE 10
                 END,
                 title

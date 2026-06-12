@@ -92,6 +92,9 @@ GPT_ACCOUNT_PRODUCT_CODE = "gpt_account_full_warranty"
 GEMINI_ACCOUNT_PRODUCT_CODE = "gemini_account_12_month"
 SUPERGROK_PRODUCT_CODE = "supergrok_1_month"
 GROK_3D_PRODUCT_CODE = "grok_3d_full_warranty"
+CLAUDE_MAX_X5_PRODUCT_CODE = "claude_max_x5_cdk"
+CLAUDE_MAX_X20_PRODUCT_CODE = "claude_max_x20_cdk"
+SUPPORT_ONLY_PRODUCT_CODES = {CLAUDE_MAX_X5_PRODUCT_CODE, CLAUDE_MAX_X20_PRODUCT_CODE}
 LINK_WHOLESALE_MIN_QUANTITY = 10
 LINK_WHOLESALE_UNIT_USD = Decimal("1.5")
 GPT_WHOLESALE_MIN_QUANTITY = 10
@@ -128,6 +131,12 @@ PRODUCT_ALIASES = {
     "grok_3d": GROK_3D_PRODUCT_CODE,
     "grok3": GROK_3D_PRODUCT_CODE,
     "grok_3d_full": GROK_3D_PRODUCT_CODE,
+    "claude5": CLAUDE_MAX_X5_PRODUCT_CODE,
+    "claude_x5": CLAUDE_MAX_X5_PRODUCT_CODE,
+    "claudemax5": CLAUDE_MAX_X5_PRODUCT_CODE,
+    "claude20": CLAUDE_MAX_X20_PRODUCT_CODE,
+    "claude_x20": CLAUDE_MAX_X20_PRODUCT_CODE,
+    "claudemax20": CLAUDE_MAX_X20_PRODUCT_CODE,
 }
 CE = {
     "gemini": ("5321197740800120767", "🤖"),
@@ -157,6 +166,7 @@ CE = {
     "news_info": ("5334544901428229844", "ℹ️"),
     "grok": ("5325547803936572038", "✦"),
     "gpt": ("5310259124817134249", "🤖"),
+    "claude": ("5321196473784773037", "✳️"),
 }
 
 
@@ -197,6 +207,8 @@ def product_description(product: dict, lang: str = "ru") -> str:
 
 
 def product_icon(product_code: str) -> str:
+    if "claude" in product_code:
+        return ce("claude")
     if "grok" in product_code:
         return "✦"
     if "gpt" in product_code:
@@ -205,6 +217,8 @@ def product_icon(product_code: str) -> str:
 
 
 def product_button_icon(product_code: str) -> str:
+    if "claude" in product_code:
+        return "✳️"
     if "grok" in product_code:
         return "✦"
     if "gpt" in product_code:
@@ -701,6 +715,21 @@ async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 
 
 def product_keyboard(lang: str = "ru", product_code: str = PRODUCT_CODE) -> InlineKeyboardMarkup:
+    if product_code in SUPPORT_ONLY_PRODUCT_CODES:
+        if lang == "en":
+            buttons = [
+                [InlineKeyboardButton(text="💬 Contact support", url=SUPPORT_URL)],
+                [InlineKeyboardButton(text="⬅️ Back to catalog", callback_data="catalog:open")],
+                [InlineKeyboardButton(text="🏠 Main menu", callback_data="menu:home")],
+            ]
+        else:
+            buttons = [
+                [InlineKeyboardButton(text="💬 Написать в поддержку", url=SUPPORT_URL)],
+                [InlineKeyboardButton(text="⬅️ Назад в каталог", callback_data="catalog:open")],
+                [InlineKeyboardButton(text="🏠 В меню", callback_data="menu:home")],
+            ]
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
+
     if lang == "en":
         buttons = [
             [InlineKeyboardButton(text="🛒 Buy", callback_data=f"buy:start:{product_code}")],
@@ -1004,6 +1033,22 @@ async def product_text(lang: str = "ru", product_code: str = PRODUCT_CODE) -> st
     wholesale = wholesale_text(product, lang)
     if wholesale:
         price = f"{price}\n{wholesale}".rstrip()
+
+    if product_code in SUPPORT_ONLY_PRODUCT_CODES:
+        if lang == "en":
+            return (
+                f"{product_icon(product_code)} <b>{product['title']}</b>\n\n"
+                f"{product_description(product, lang)}\n\n"
+                f"{ce('news_money')} <b>Price:</b> {price}\n"
+                f"{ce('support')} To order, contact support: {SUPPORT_USERNAME}"
+            )
+
+        return (
+            f"{product_icon(product_code)} <b>{product['title']}</b>\n\n"
+            f"{product_description(product, lang)}\n\n"
+            f"{ce('news_money')} <b>Цена:</b> {price}\n"
+            f"{ce('support')} Для заказа напишите в поддержку: {SUPPORT_USERNAME}"
+        )
 
     if lang == "en":
         return (
@@ -3282,6 +3327,15 @@ async def start_bulk_order(callback: CallbackQuery, state: FSMContext) -> None:
     lang = await get_lang(callback.from_user.id)
     parts = callback.data.split(":")
     product_code = parts[2] if len(parts) > 2 else PRODUCT_CODE
+    if product_code in SUPPORT_ONLY_PRODUCT_CODES:
+        text = (
+            f"{ce('support')} This product is ordered through support: {SUPPORT_USERNAME}"
+            if lang == "en"
+            else f"{ce('support')} Этот товар оформляется через поддержку: {SUPPORT_USERNAME}"
+        )
+        await callback.message.answer(text, reply_markup=product_keyboard(lang, product_code))
+        await callback.answer()
+        return
     await state.clear()
     await state.update_data(bulk_product_code=product_code)
     await callback.message.answer(await quantity_text(lang, product_code), reply_markup=quantity_keyboard(lang, product_code))
