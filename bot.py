@@ -272,13 +272,24 @@ async def answer_with_banner(
         try:
             await message.answer_photo(FSInputFile(PROFILE_BANNER_PATH), caption=text, reply_markup=reply_markup)
         except TelegramBadRequest as exc:
-            if "DOCUMENT_INVALID" not in str(exc):
+            error_text = str(exc)
+            if "DOCUMENT_INVALID" in error_text:
+                await message.answer_photo(
+                    FSInputFile(PROFILE_BANNER_PATH),
+                    caption=plain_custom_emoji(text),
+                    reply_markup=reply_markup,
+                )
+                return
+            if "ENTITY_TEXT_INVALID" in error_text:
+                await message.answer_photo(
+                    FSInputFile(PROFILE_BANNER_PATH),
+                    caption=plain_telegram_text(text),
+                    reply_markup=reply_markup,
+                    parse_mode=None,
+                )
+                return
+            if "DOCUMENT_INVALID" not in error_text:
                 raise
-            await message.answer_photo(
-                FSInputFile(PROFILE_BANNER_PATH),
-                caption=plain_custom_emoji(text),
-                reply_markup=reply_markup,
-            )
         return
 
     await safe_answer(message, text, reply_markup=reply_markup)
