@@ -256,6 +256,14 @@ async def get_reviews_channel_id() -> str:
     return await get_bot_setting("reviews_channel_id", REVIEWS_CHANNEL_ID or "")
 
 
+async def get_start_template() -> tuple[str, int] | None:
+    chat_id = await get_bot_setting("start_template_chat_id", "")
+    message_id = await get_bot_setting("start_template_message_id", "")
+    if not chat_id or not message_id.isdigit():
+        return None
+    return chat_id, int(message_id)
+
+
 def forwarded_chat_id(message: Message) -> str:
     source = message.reply_to_message or message
     forward_from_chat = getattr(source, "forward_from_chat", None)
@@ -1851,9 +1859,23 @@ async def show_payment_methods_for_quantity(message: Message, state: FSMContext,
 
 
 @router.message(CommandStart())
-async def start(message: Message) -> None:
+async def start(message: Message, bot: Bot) -> None:
     user = await ensure_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     lang = user["language"] if user["language"] in {"ru", "en"} else "ru"
+    template = await get_start_template()
+    if template:
+        template_chat_id, template_message_id = template
+        try:
+            await bot.copy_message(
+                chat_id=message.chat.id,
+                from_chat_id=int(template_chat_id) if template_chat_id.lstrip("-").isdigit() else template_chat_id,
+                message_id=template_message_id,
+                reply_markup=start_keyboard(lang),
+            )
+            return
+        except Exception:
+            logging.exception("Could not copy start template %s/%s", template_chat_id, template_message_id)
+
     await answer_with_banner(
         message,
         await home_text(lang, display_user_name(message.from_user)),
@@ -1906,6 +1928,21 @@ async def check_subscription(callback: CallbackQuery, bot: Bot) -> None:
 
     text = f"{ce('ok')} Subscription confirmed." if lang == "en" else f"{ce('ok')} Подписка подтверждена."
     await callback.message.answer(text)
+    template = await get_start_template()
+    if template:
+        template_chat_id, template_message_id = template
+        try:
+            await bot.copy_message(
+                chat_id=callback.message.chat.id,
+                from_chat_id=int(template_chat_id) if template_chat_id.lstrip("-").isdigit() else template_chat_id,
+                message_id=template_message_id,
+                reply_markup=start_keyboard(lang),
+            )
+            await callback.answer()
+            return
+        except Exception:
+            logging.exception("Could not copy start template %s/%s", template_chat_id, template_message_id)
+
     await answer_with_banner(
         callback.message,
         await home_text(lang, display_user_name(callback.from_user)),
@@ -2452,6 +2489,43 @@ async def set_reviews_channel_command(message: Message, bot: Bot) -> None:
         f"{ce('ok')} Канал отзывов привязан: <b>{title}</b>\n"
         f"ID: <code>{saved}</code>"
     )
+
+
+@router.message(Command("setstarttemplate"))
+async def set_start_template_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await safe_answer(message, "Эта команда доступна только администратору.")
+        return
+
+    if not message.reply_to_message:
+        await safe_answer(
+            message,
+            "Ответьте командой <code>/setstarttemplate</code> на сообщение, которое нужно копировать при /start.\n\n"
+            "В это сообщение можно вручную вставить анимированные emoji из Telegram-паков."
+        )
+        return
+
+    source = message.reply_to_message
+    await set_bot_setting("start_template_chat_id", str(source.chat.id))
+    await set_bot_setting("start_template_message_id", str(source.message_id))
+    await safe_answer(
+        message,
+        f"{ce('ok')} Стартовый шаблон сохранён.\n\n"
+        f"Chat ID: <code>{source.chat.id}</code>\n"
+        f"Message ID: <code>{source.message_id}</code>\n\n"
+        "Теперь при <code>/start</code> бот будет копировать это сообщение и добавлять меню."
+    )
+
+
+@router.message(Command("clearstarttemplate"))
+async def clear_start_template_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await safe_answer(message, "Эта команда доступна только администратору.")
+        return
+
+    await set_bot_setting("start_template_chat_id", "")
+    await set_bot_setting("start_template_message_id", "")
+    await safe_answer(message, f"{ce('ok')} Стартовый шаблон отключён. Бот снова использует обычный /start.")
 
 
 @router.message(Command("setprice"))
@@ -4036,6 +4110,8 @@ async def main() -> None:
                 BotCommand(command="resendorder", description="Повторно отправить заказ"),
                 BotCommand(command="resend", description="Повторно отправить заказ"),
                 BotCommand(command="setreviews", description="Set reviews channel"),
+                BotCommand(command="setstarttemplate", description="Задать шаблон /start"),
+                BotCommand(command="clearstarttemplate", description="Отключить шаблон /start"),
                 BotCommand(command="setprice", description="Поменять цену товара"),
                 BotCommand(command="setcost", description="Поменять закуп товара"),
                 BotCommand(command="addlinks", description="Добавить ссылки"),
