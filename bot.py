@@ -234,6 +234,13 @@ def product_button_icon(product_code: str) -> str:
     return "💠"
 
 
+def catalog_stock_label(product_code: str, stock: int, lang: str = "ru") -> str:
+    if product_code in {CLAUDE_MAX_X5_PRODUCT_CODE, CLAUDE_MAX_X20_PRODUCT_CODE}:
+        return "∞"
+    item_suffix = "pcs" if lang == "en" else "шт."
+    return f"{stock} {item_suffix}"
+
+
 def resolve_product_code(value: str) -> str:
     normalized = value.strip().lower().replace("-", "_")
     normalized = normalized.replace(" ", "_")
@@ -714,15 +721,15 @@ def start_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
 
 async def catalog_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     back = "⬅️ Back" if lang == "en" else "⬅️ Назад"
-    item_suffix = "pcs" if lang == "en" else "шт."
     products = await visible_catalog_products()
     rows = []
     for product in products:
         stock = await count_available_links(product["code"])
         price = format_price(product)
+        stock_label = catalog_stock_label(str(product["code"]), stock, lang)
         rows.append([
             InlineKeyboardButton(
-                text=f"{product_button_icon(product['code'])} {product['title']} | {price} | {stock} {item_suffix}",
+                text=f"{product_button_icon(product['code'])} {product['title']} | {price} | {stock_label}",
                 callback_data=f"product:{product['code']}",
             )
         ])
@@ -983,12 +990,13 @@ async def home_text(lang: str = "ru", user_name: str | None = None) -> str:
     products = await visible_catalog_products()
     product_lines = []
     total_stock = 0
-    item_suffix = "pcs" if lang == "en" else "шт."
     for product in products:
         stock = await count_available_links(product["code"])
-        total_stock += stock
+        if product["code"] not in {CLAUDE_MAX_X5_PRODUCT_CODE, CLAUDE_MAX_X20_PRODUCT_CODE}:
+            total_stock += stock
         title = html.escape(str(product["title"]))
-        product_lines.append(f"{product_icon(product['code'])} {title} | {format_price(product)} | {stock} {item_suffix}")
+        stock_label = catalog_stock_label(str(product["code"]), stock, lang)
+        product_lines.append(f"{product_icon(product['code'])} {title} | {format_price(product)} | {stock_label}")
     greeting_name = f", {html.escape(user_name)}" if user_name else ""
 
     if lang == "en":
