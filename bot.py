@@ -96,6 +96,7 @@ GROK_3D_PRODUCT_CODE = "grok_3d_full_warranty"
 CLAUDE_MAX_X5_PRODUCT_CODE = "claude_max_x5_cdk"
 CLAUDE_MAX_X20_PRODUCT_CODE = "claude_max_x20_cdk"
 SUPPORT_ONLY_PRODUCT_CODES = {CLAUDE_MAX_X5_PRODUCT_CODE, CLAUDE_MAX_X20_PRODUCT_CODE}
+MANUAL_RESERVE_PRODUCT_CODES = {GPT_ACCOUNT_PRODUCT_CODE}
 LINK_WHOLESALE_MIN_QUANTITY = 10
 LINK_WHOLESALE_UNIT_USD = Decimal("1.5")
 GPT_WHOLESALE_MIN_QUANTITY = 10
@@ -1625,6 +1626,9 @@ async def notify_paid_payment(bot: Bot, payment: dict, provider: str) -> None:
 async def process_reserved_orders(bot: Bot, product_code: str | None = None) -> int:
     processed = 0
     for order in await list_reserved_orders(product_code, 100):
+        if str(order["product_code"]) in MANUAL_RESERVE_PRODUCT_CODES:
+            continue
+
         quantity = quantity_from_order_title(str(order["product_title"]))
         if await count_available_links(str(order["product_code"])) < quantity:
             continue
