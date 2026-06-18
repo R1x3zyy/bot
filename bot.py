@@ -1350,17 +1350,19 @@ def gpt_account_notice(lang: str = "ru") -> str:
     if lang == "en":
         return (
             f"\n\n{ce('news_shield')} <b>Recommendations after receiving the account:</b>\n"
-            "• You may change the password and other account details at your discretion.\n"
+            "• Do not change the phone number, password, or other account details.\n"
             "• Do not use the account on more than 2 devices. 2 devices is the maximum.\n"
             "• Use a reliable proxy or a good VPN for stable access.\n"
+            "• If account details are changed, the warranty may be void.\n"
             "• If you have any login issue, contact support first."
         )
 
     return (
         f"\n\n{ce('news_shield')} <b>Рекомендации после получения аккаунта:</b>\n"
-        "• Вы можете менять пароль и другие данные аккаунта на свое усмотрение.\n"
+        "• Не меняйте номер телефона, пароль и другие данные аккаунта.\n"
         "• Не входите в аккаунт больше чем на 2 устройствах, 2 устройства — максимум.\n"
         "• Для стабильного входа используйте хороший прокси или хороший VPN.\n"
+        "• Если данные аккаунта были изменены, гарантия может быть снята.\n"
         "• Если возникла проблема со входом, сначала напишите в поддержку."
     )
 
@@ -2743,7 +2745,7 @@ async def add_gpt_accounts_command(message: Message, state: FSMContext) -> None:
         state,
         GPT_ACCOUNT_PRODUCT_CODE,
         "GPT-аккаунтов",
-        "mail1@hotmail.com:password",
+        "+79991234567:password",
     )
 
 
