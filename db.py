@@ -15,7 +15,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/gemini_store")
 URL_RE = re.compile(r"https?://\S+")
-PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "2.00"))
+PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "2.75"))
 NEW_LINK_COST_USD = Decimal(os.getenv("NEW_LINK_COST_USD", "1.10"))
 REPORT_TZ = os.getenv("REPORT_TZ", "Europe/Moscow")
 ADMIN_ID = os.getenv("ADMIN_ID", "")
