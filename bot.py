@@ -99,13 +99,10 @@ SUPPORT_ONLY_PRODUCT_CODES = {CLAUDE_MAX_X5_PRODUCT_CODE, CLAUDE_MAX_X20_PRODUCT
 MANUAL_RESERVE_PRODUCT_CODES = {GPT_ACCOUNT_PRODUCT_CODE}
 LINK_WHOLESALE_MIN_QUANTITY = 10
 LINK_WHOLESALE_UNIT_USD = Decimal("1.5")
-GPT_WHOLESALE_MIN_QUANTITY = 10
-GPT_WHOLESALE_UNIT_USD = Decimal("3.5")
 GROK_WHOLESALE_MIN_QUANTITY = 5
 GROK_WHOLESALE_UNIT_USD = Decimal("5.5")
 WHOLESALE_TIERS = {
     PRODUCT_CODE: [(LINK_WHOLESALE_MIN_QUANTITY, LINK_WHOLESALE_UNIT_USD)],
-    GPT_ACCOUNT_PRODUCT_CODE: [(GPT_WHOLESALE_MIN_QUANTITY, GPT_WHOLESALE_UNIT_USD)],
     SUPERGROK_PRODUCT_CODE: [(GROK_WHOLESALE_MIN_QUANTITY, GROK_WHOLESALE_UNIT_USD)],
 }
 HIDDEN_CATALOG_PRODUCT_CODES = {GEMINI_ACCOUNT_PRODUCT_CODE, GROK_3D_PRODUCT_CODE}
@@ -1349,20 +1346,36 @@ async def send_platega_invoice(
 def gpt_account_notice(lang: str = "ru") -> str:
     if lang == "en":
         return (
-            f"\n\n{ce('news_shield')} <b>Recommendations after receiving the account:</b>\n"
-            "• Do not change the phone number, password, or other account details.\n"
+            f"\n\n{ce('news_shield')} <b>Full warranty: 30 days.</b>\n\n"
+            f"{ce('news_pencil')} <b>ChatGPT account login guide:</b>\n"
+            "You receive: email, password, and 2FA key.\n\n"
+            "1. Open https://chatgpt.com and press Log in.\n"
+            "2. Enter the issued email and password.\n"
+            "3. When ChatGPT asks for a 2FA code, add the issued 2FA key to Google Authenticator.\n"
+            "4. Open Google Authenticator, press +, choose manual key entry, add any account name, paste the 2FA key, and save it.\n"
+            "5. Enter the current 6-digit code from Google Authenticator on ChatGPT. The code refreshes every 30 seconds.\n\n"
+            f"{ce('news_shield')} <b>Recommendations:</b>\n"
+            "• After login, change the password to your own.\n"
             "• Do not use the account on more than 2 devices. 2 devices is the maximum.\n"
             "• Use a reliable proxy or a good VPN for stable access.\n"
-            "• If account details are changed, the warranty may be void.\n"
+            "• If the code does not work, wait for the next code and try again.\n"
             "• If you have any login issue, contact support first."
         )
 
     return (
-        f"\n\n{ce('news_shield')} <b>Рекомендации после получения аккаунта:</b>\n"
-        "• Не меняйте номер телефона, пароль и другие данные аккаунта.\n"
+        f"\n\n{ce('news_shield')} <b>Полная гарантия: 30 дней.</b>\n\n"
+        f"{ce('news_pencil')} <b>Инструкция по входу в аккаунт ChatGPT:</b>\n"
+        "В выдаче вам предоставляются: почта (Email), пароль и ключ двухфакторной аутентификации (2FA).\n\n"
+        "1. Перейдите на сайт https://chatgpt.com и нажмите «Войти».\n"
+        "2. Введите выданную почту, нажмите «Продолжить», затем введите выданный пароль.\n"
+        "3. После запроса 2FA-кода добавьте выданный 2FA-ключ в Google Authenticator.\n"
+        "4. В Google Authenticator нажмите «+», выберите ручной ввод ключа, укажите любое название аккаунта, вставьте ключ и нажмите «Добавить».\n"
+        "5. Введите текущий шестизначный код на сайте ChatGPT. Код обновляется каждые 30 секунд.\n\n"
+        f"{ce('news_shield')} <b>Рекомендации:</b>\n"
+        "• После входа поменяйте пароль на свой.\n"
         "• Не входите в аккаунт больше чем на 2 устройствах, 2 устройства — максимум.\n"
         "• Для стабильного входа используйте хороший прокси или хороший VPN.\n"
-        "• Если данные аккаунта были изменены, гарантия может быть снята.\n"
+        "• Если код не подошел, дождитесь обновления следующего кода и попробуйте снова.\n"
         "• Если возникла проблема со входом, сначала напишите в поддержку."
     )
 
@@ -2745,7 +2758,7 @@ async def add_gpt_accounts_command(message: Message, state: FSMContext) -> None:
         state,
         GPT_ACCOUNT_PRODUCT_CODE,
         "GPT-аккаунтов",
-        "+79991234567:password",
+        "mail@example.com:password:2fa",
     )
 
 

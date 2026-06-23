@@ -15,7 +15,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/gemini_store")
 URL_RE = re.compile(r"https?://\S+")
-PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "2.75"))
+PRODUCT_COST_USD = Decimal(os.getenv("PRODUCT_COST_USD", "5.00"))
 NEW_LINK_COST_USD = Decimal(os.getenv("NEW_LINK_COST_USD", "1.10"))
 REPORT_TZ = os.getenv("REPORT_TZ", "Europe/Moscow")
 ADMIN_ID = os.getenv("ADMIN_ID", "")
@@ -29,13 +29,10 @@ CLAUDE_MAX_X5_PRODUCT_CODE = "claude_max_x5_cdk"
 CLAUDE_MAX_X20_PRODUCT_CODE = "claude_max_x20_cdk"
 LINK_WHOLESALE_MIN_QUANTITY = 10
 LINK_WHOLESALE_UNIT_USD = Decimal("1.50")
-GPT_WHOLESALE_MIN_QUANTITY = 10
-GPT_WHOLESALE_UNIT_USD = Decimal("3.50")
 GROK_WHOLESALE_MIN_QUANTITY = 5
 GROK_WHOLESALE_UNIT_USD = Decimal("5.50")
 WHOLESALE_TIERS = {
     DEFAULT_PRODUCT_CODE: [(LINK_WHOLESALE_MIN_QUANTITY, LINK_WHOLESALE_UNIT_USD)],
-    GPT_ACCOUNT_PRODUCT_CODE: [(GPT_WHOLESALE_MIN_QUANTITY, GPT_WHOLESALE_UNIT_USD)],
     SUPERGROK_PRODUCT_CODE: [(GROK_WHOLESALE_MIN_QUANTITY, GROK_WHOLESALE_UNIT_USD)],
 }
 SUPPORT_ONLY_PRODUCT_CODES = {CLAUDE_MAX_X5_PRODUCT_CODE, CLAUDE_MAX_X20_PRODUCT_CODE}
@@ -264,21 +261,20 @@ async def ensure_schema() -> None:
             (
                 "gpt_account_full_warranty",
                 "GPT account full warranty",
-                Decimal("290.00"),
-                Decimal("4.00"),
+                Decimal("510.00"),
+                Decimal("7.00"),
                 (
-                    f"{'💰'} Цена: 4.00 USD\n"
+                    f"{'💰'} Цена: 7.00 USD\n"
                     f"{'⏳'} Срок действия: 30 дней\n"
-                    f"{'🛡️'} Гарантия: 15 дней\n"
+                    f"{'🛡️'} Гарантия: полная гарантия 30 дней\n"
                     f"{'📦'} Доставка: READY_ACCOUNT\n\n"
-                    "Готовый аккаунт ChatGPT Plus на 1 месяц. После оплаты вы получите данные для входа.\n\n"
+                    "Готовый аккаунт ChatGPT Plus на 1 месяц. После оплаты вы получите данные для входа и инструкцию по полной активации.\n\n"
                     "Формат выдачи:\n"
-                    "номер телефона:пароль\n\n"
+                    "email:password:2fa\n\n"
                     "Рекомендации после получения:\n"
-                    "- не меняйте номер телефона, пароль и другие данные аккаунта;\n"
+                    "- после входа поменяйте пароль на свой;\n"
                     "- не входите в аккаунт больше чем на 2 устройствах, 2 устройства — максимум;\n"
                     "- для стабильного входа используйте хороший прокси или хороший VPN;\n"
-                    "- если данные аккаунта были изменены, гарантия может быть снята;\n"
                     "- если возникла проблема со входом, сначала напишите в поддержку."
                 ),
             ),
